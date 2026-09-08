@@ -55,7 +55,7 @@ export type LibraryItem = ImageItem | VideoItem;
  * When the real curated originals land, drop them in with the same base names
  * and change `IMG_EXT` to `'jpg'` — nothing else needs to move.
  */
-export const IMG_EXT: 'svg' | 'jpg' = 'svg';
+export const IMG_EXT: 'svg' | 'jpg' = 'jpg';
 
 const imgFull = (key: string) =>
   `/uploads/puzzle-library/full/puz_${key}.${IMG_EXT}`;

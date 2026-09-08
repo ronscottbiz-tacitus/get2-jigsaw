@@ -1,25 +1,78 @@
 /**
- * Section 2 — "Live, moving puzzles." A row of the five Live clips. Where a
- * real .mp4 exists it autoplays; until then the still poster carries the tile
- * (with a faint sheen so the row doesn't read as dead).
+ * Section 2 — "Live, moving puzzles." A row of the five Live clips. Each tile
+ * plays only while it's on screen (IntersectionObserver) so we never decode all
+ * five at once, and retries play() on the first page interaction in case the
+ * browser withheld muted-autoplay. The still poster covers the tile until the
+ * video is actually presenting frames.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { VIDEOS } from '../../content/library';
 
-function LiveTile({ src, poster, name }: { src: string; poster: string; name: string }) {
+/** Fires the callback once, on the first real user interaction anywhere. */
+function useFirstInteraction(cb: () => void) {
+  useEffect(() => {
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      cb();
+      for (const e of evts) window.removeEventListener(e, run);
+    };
+    const evts = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
+    for (const e of evts) window.addEventListener(e, run, { passive: true });
+    return () => {
+      for (const e of evts) window.removeEventListener(e, run);
+    };
+  }, [cb]);
+}
+
+function LiveTile({
+  src,
+  poster,
+  name,
+  nudge,
+}: {
+  src: string;
+  poster: string;
+  name: string;
+  nudge: number;
+}) {
   const ref = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    // set .src imperatively; if the file 404s the poster simply stays visible.
-    v.src = src;
-    const show = () => {
-      v.style.opacity = '1';
+    // set .src imperatively; a 404 just leaves the poster showing.
+    if (v.src !== new URL(src, location.href).href) v.src = src;
+
+    const onPlaying = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    v.addEventListener('playing', onPlaying);
+    v.addEventListener('pause', onPause);
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) void v.play().catch(() => {});
+        else v.pause();
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(v);
+
+    return () => {
+      io.disconnect();
+      v.removeEventListener('playing', onPlaying);
+      v.removeEventListener('pause', onPause);
     };
-    v.addEventListener('canplay', show);
-    void v.play().catch(() => {});
-    return () => v.removeEventListener('canplay', show);
   }, [src]);
+
+  // retry when the page first gets a gesture (covers withheld autoplay)
+  useEffect(() => {
+    if (nudge === 0) return;
+    const v = ref.current;
+    if (v && isInView(v)) void v.play().catch(() => {});
+  }, [nudge]);
 
   return (
     <div
@@ -31,29 +84,20 @@ function LiveTile({ src, poster, name }: { src: string; poster: string; name: st
         background: `#0a0a0a url('${poster}') center / cover no-repeat`,
       }}
     >
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'linear-gradient(115deg,transparent 30%,rgba(255,255,255,.06) 50%,transparent 70%)',
-          backgroundSize: '250% 100%',
-          animation: 'heroMoveAmbient 6s ease-in-out infinite',
-        }}
-      />
       <video
         ref={ref}
         muted
         loop
         playsInline
         autoPlay
+        preload="metadata"
         style={{
           position: 'absolute',
           inset: 0,
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          opacity: 0,
+          opacity: playing ? 1 : 0,
           transition: 'opacity .4s ease',
         }}
       />
@@ -78,7 +122,15 @@ function LiveTile({ src, poster, name }: { src: string; poster: string; name: st
   );
 }
 
+function isInView(el: Element) {
+  const r = el.getBoundingClientRect();
+  return r.bottom > 0 && r.top < window.innerHeight;
+}
+
 export function LiveRow() {
+  const [nudge, setNudge] = useState(0);
+  useFirstInteraction(() => setNudge((n) => n + 1));
+
   return (
     <section
       style={{
@@ -114,7 +166,13 @@ export function LiveRow() {
         }}
       >
         {VIDEOS.map((v) => (
-          <LiveTile key={v.key} src={v.src} poster={v.poster} name={v.name} />
+          <LiveTile
+            key={v.key}
+            src={v.src}
+            poster={v.poster}
+            name={v.name}
+            nudge={nudge}
+          />
         ))}
       </div>
     </section>

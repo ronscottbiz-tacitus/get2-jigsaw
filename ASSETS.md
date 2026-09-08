@@ -1,45 +1,45 @@
-# Assets — real vs placeholder
+# Assets
 
-Only the **Get2 logo** is a real asset. Everything else under `public/uploads/`
-is a generated stand-in from `scripts/gen-placeholders.mjs` (run
-`node scripts/gen-placeholders.mjs` to regenerate).
+All curated content is now **real** (dropped in 2026-09-08):
 
-| Asset | Status | Path | Replace with |
-|---|---|---|---|
-| Get2 logo | ✅ real | `public/uploads/get2-logo.png` | — |
-| 12 curated images (full + thumb) | ⛔ placeholder `.svg` | `public/uploads/puzzle-library/{full,thumbs}/puz_<key>.svg` | Google AI Studio originals, `.jpg` |
-| 5 Live posters | ⛔ placeholder `.svg` | `public/uploads/puzzle-library/posters/poster_<key>.svg` | still frame from each clip, `.jpg` |
-| 5 Live clips | ⛔ missing | `public/uploads/<key>.mp4` | Morph Studio image-to-video, `.mp4` |
-| Board texture | ⛔ placeholder `.svg` | `public/uploads/textures/brushed-metal-grain.png.svg` | tileable brushed-metal `.png` |
+| Asset | Path | Notes |
+|---|---|---|
+| Get2 logo | `public/uploads/get2-logo.png` | 600×346 |
+| 12 curated images — full | `public/uploads/puzzle-library/full/puz_<key>.jpg` | re-encoded to ≤2200px, q86 (~0.8–1.7 MB each) |
+| 12 curated images — thumbs | `public/uploads/puzzle-library/thumbs/puz_<key>.jpg` | 600×335, ~50–96 KB |
+| 5 Live posters | `public/uploads/puzzle-library/posters/poster_<key>.jpg` | re-encoded to real JPEG ≤1920px, q82 (~230–480 KB) |
+| 5 Live clips | `public/uploads/<key>.mp4` | `clouds_2`, `balloons`, `fire`, `murmuration`, `jellyfish`; 1.8–3.9 MB |
+| Board texture | `public/uploads/textures/brushed-metal-grain.png.svg` | still a generated placeholder |
 
-## Dropping in the real assets
+`src/content/library.ts` has `IMG_EXT = 'jpg'`.
 
-1. **Images** — put the real files at the same paths with `.jpg` extension, then
-   set `IMG_EXT = 'jpg'` in `src/content/library.ts`. SVG placeholders can stay;
-   they're ignored once the extension flips.
-2. **Live clips** — drop `clouds_2.mp4`, `balloons.mp4`, `fire.mp4`,
-   `murmuration.mp4`, `jellyfish.mp4` into `public/uploads/`. No code change —
-   `JigsawGame` uses the real video the moment it loads and drops the animated
-   fallback fill. (The prototype's filenames are kept: note `clouds_2.mp4`, not
-   `clouds.mp4`.)
-3. **Texture** — add `brushed-metal-grain.png` and point `TEXTURE_URL` in
-   `src/game/constants.ts` at it.
+## Optimization note
 
-## Placeholder behaviour today
+The dropped posters were 1.8–9.5 MB PNGs saved with a `.jpg` extension (the
+jellyfish one drives the marketing hero). They were re-encoded in place to real
+JPEGs — **25.7 MB → 1.6 MB total** — and the full images trimmed from ~21 MB to
+~14 MB. Un-touched originals are backed up under
+`public/uploads/_originals/` (git-ignored); delete that folder once you're happy.
 
-- **Classic** puzzles use the gradient SVGs — fully playable, the picture is
-  just abstract.
-- **Live** puzzles: with no `.mp4`, `JigsawGame.paintFallbackSlice` fills each
-  piece with a slow-drifting gradient field so the mechanic still reads as
-  "moving". Marketing Live tiles show the poster with a light sheen.
-- The hero backdrop uses the jellyfish **poster** as a still until
-  `jellyfish.mp4` exists (then swap the `<div>` backdrop in
-  `src/components/welcome/Hero.tsx` for a `<video>`).
+Regenerate optimized versions from a fresh drop with:
+
+```bash
+sips -s format jpeg -s formatOptions 82 -Z 1920 <src> --out <dest>   # posters
+sips -s format jpeg -s formatOptions 86 -Z 2200 <src> --out <dest>   # full images
+```
+
+## Placeholder generator
+
+`scripts/gen-placeholders.mjs` still exists — it writes gradient `.svg`
+stand-ins. Only needed if you add library keys before their real art exists;
+set `IMG_EXT = 'svg'` to use them.
+
+## Still a placeholder
+
+- **Board texture** — `TEXTURE_URL` in `src/game/constants.ts` points at the SVG.
+  Swap in a tileable `brushed-metal-grain.png` and update the constant.
 
 ## Library size
 
-The manifest currently has the **12** images named in the prototype (2 per
-category) + the **5** Live clips. Target is 30–50 images — add rows to `IMAGES`
-in `src/content/library.ts` and a matching entry in `scripts/gen-placeholders.mjs`
-(or just drop real files in). Confirm with Ron which of the 12 names are real
-curated originals vs. demo stand-ins.
+12 images (2 per category) + 5 Live clips. Target is 30–50 images — add rows to
+`IMAGES` in `src/content/library.ts` and drop matching files in.

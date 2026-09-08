@@ -12,3 +12,6 @@ coverage
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# pre-optimization asset backups
+public/uploads/_originals/
