@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="280" viewBox="0 0 420 280">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2a0606"/><stop offset="0.55" stop-color="#a01b1b"/><stop offset="1" stop-color="#f2896f"/>
+</linearGradient>
+<radialGradient id="h" cx="0.3" cy="0.25" r="0.9">
+<stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="420" height="280" fill="url(#g)"/>
+<circle cx="326" cy="157" r="80" fill="#fff" opacity="0.070"/><circle cx="171" cy="268" r="88" fill="#fff" opacity="0.094"/><circle cx="229" cy="75" r="43" fill="#fff" opacity="0.068"/><circle cx="67" cy="151" r="62" fill="#fff" opacity="0.031"/><circle cx="356" cy="246" r="143" fill="#fff" opacity="0.060"/><circle cx="239" cy="137" r="68" fill="#fff" opacity="0.058"/><circle cx="278" cy="233" r="96" fill="#fff" opacity="0.039"/><circle cx="338" cy="176" r="61" fill="#fff" opacity="0.063"/>
+<rect width="420" height="280" fill="url(#h)"/>
+<text x="25.2" y="257.6" font-family="'Archivo Expanded','Arial Narrow',sans-serif" font-weight="800" font-size="25" fill="#fff" fill-opacity="0.9">Poppies</text>
+</svg>

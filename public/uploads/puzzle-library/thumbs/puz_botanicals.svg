@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="280" viewBox="0 0 420 280">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#0f2410"/><stop offset="0.55" stop-color="#3f7a3f"/><stop offset="1" stop-color="#a9d99b"/>
+</linearGradient>
+<radialGradient id="h" cx="0.3" cy="0.25" r="0.9">
+<stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="420" height="280" fill="url(#g)"/>
+<circle cx="277" cy="167" r="115" fill="#fff" opacity="0.095"/><circle cx="133" cy="181" r="124" fill="#fff" opacity="0.080"/><circle cx="169" cy="132" r="100" fill="#fff" opacity="0.062"/><circle cx="152" cy="7" r="116" fill="#fff" opacity="0.093"/><circle cx="150" cy="11" r="148" fill="#fff" opacity="0.064"/><circle cx="307" cy="264" r="107" fill="#fff" opacity="0.094"/><circle cx="124" cy="156" r="70" fill="#fff" opacity="0.088"/><circle cx="388" cy="203" r="47" fill="#fff" opacity="0.037"/>
+<rect width="420" height="280" fill="url(#h)"/>
+<text x="25.2" y="257.6" font-family="'Archivo Expanded','Arial Narrow',sans-serif" font-weight="800" font-size="25" fill="#fff" fill-opacity="0.9">Botanicals</text>
+</svg>

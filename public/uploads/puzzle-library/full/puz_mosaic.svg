@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2b0f1f"/><stop offset="0.55" stop-color="#8a2f5c"/><stop offset="1" stop-color="#e6a3c4"/>
+</linearGradient>
+<radialGradient id="h" cx="0.3" cy="0.25" r="0.9">
+<stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="1200" height="800" fill="url(#g)"/>
+<rect x="-20" y="18" width="1240" height="144" fill="#000" opacity="0.040"/><rect x="-20" y="130" width="1240" height="144" fill="#000" opacity="0.060"/><rect x="-20" y="246" width="1240" height="144" fill="#000" opacity="0.080"/><rect x="-20" y="353" width="1240" height="144" fill="#000" opacity="0.100"/><rect x="-20" y="471" width="1240" height="144" fill="#000" opacity="0.120"/><rect x="-20" y="583" width="1240" height="144" fill="#000" opacity="0.140"/><rect x="-20" y="700" width="1240" height="144" fill="#000" opacity="0.160"/>
+<rect width="1200" height="800" fill="url(#h)"/>
+
+</svg>

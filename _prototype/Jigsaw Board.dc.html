@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Archivo+Expanded:wght@700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@keyframes pieceSnap {
+  0% { transform: rotate(-50deg) scale(.9); box-shadow: 0 0 0 0 rgba(0,82,255,0); }
+  55% { transform: rotate(-50deg) scale(.9); box-shadow: 0 0 0 0 rgba(0,82,255,0); }
+  78% { transform: rotate(6deg) scale(1.06); }
+  86% { transform: rotate(-3deg) scale(1); box-shadow: 0 0 40px 6px rgba(0,82,255,.65); }
+  100% { transform: rotate(0deg) scale(1); box-shadow: 0 0 0 0 rgba(0,82,255,0); }
+}
+@keyframes closeupReveal { 0% { transform: scale(3.2); } 60% { transform: scale(1.15); } 100% { transform: scale(1.15); } }
+@keyframes heroCopyIn { from { opacity:0; transform: scale(.94) translateY(10px); } to { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes heroHeadlineIn { 0% { opacity:0; transform: scale(.55); } 55% { opacity:1; transform: scale(1.08); } 78% { transform: scale(.96); } 100% { opacity:1; transform: scale(1); } }
+@keyframes heroMoveAmbient { 0%,100% { background-position:0% 0; } 50% { background-position:100% 0; } }
+@keyframes puzzleZoomOut { from { transform: scale(1.06); } to { transform: scale(1); } }
+@keyframes puzzleLightSweep { 0% { transform: translateX(-140%) skewX(-12deg); opacity:0; } 15% { opacity:.5; } 60% { opacity:.5; } 100% { transform: translateX(140%) skewX(-12deg); opacity:0; } }
+@keyframes puzzleFadeIn { from { opacity:0; } to { opacity:1; } }
+@keyframes puzzleGlowRipple { 0% { opacity:0; transform: translate(-50%,-50%) scale(.5); } 25% { opacity:.6; } 100% { opacity:0; transform: translate(-50%,-50%) scale(2.2); } }
+@keyframes statsPopIn { from { opacity:0; transform: scale(.92) translateY(8px); } to { opacity:1; transform: scale(1) translateY(0); } }
+@keyframes introNudgeGlow { 0%,100% { opacity:0; } 50% { opacity:1; } }
+@keyframes heroSlotBreathe { 0%,100% { opacity:.85; } 50% { opacity:1; } }
+</style>
+</helmet>
+<sc-if value="{{ showWelcome }}" hint-placeholder-val="{{ false }}">
+<div style="background:#000;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;overflow-x:hidden">
+
+<sc-if value="{{ heroShowCopy }}" hint-placeholder-val="{{ false }}">
+<a href="https://get2.one" target="_blank" rel="noopener noreferrer" style="position:fixed;top:24px;left:24px;z-index:80;display:block;animation:heroCopyIn .6s cubic-bezier(.22,1,.36,1)">
+<img src="uploads/Get2_logo(600 x 346 px) (1).png" alt="Get2" style="height:52px;width:auto;display:block;opacity:.92"></img>
+</a>
+<div style="position:fixed;top:20px;right:20px;z-index:80;animation:heroCopyIn .6s cubic-bezier(.22,1,.36,1)">
+<span onClick="{{ dismissWelcome }}" style="display:inline-block;background:rgba(0,82,255,.08);backdrop-filter:blur(6px);color:#fff;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:12px 26px;border-radius:100px;border:1px solid #0052FF;cursor:pointer;transition:box-shadow .25s ease" style-hover="box-shadow:0 0 24px rgba(0,82,255,.6)">Start Playing</span>
+</div>
+</sc-if>
+
+<section ref="{{ setHeroSectionRef }}" style="position:relative;height:100vh;min-height:640px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden">
+<video src="uploads/jellyfish.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.5"></video>
+<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.35) 0%,rgba(0,0,0,.55) 55%,rgba(0,0,0,.9) 100%)"></div>
+<div style="position:absolute;left:0;top:0;width:{{ heroW }}px;height:{{ heroH }}px;z-index:1">
+<sc-for list="{{ heroSlots }}" as="slot" hint-placeholder-count="6">
+<sc-if value="{{ slot.visible }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:{{ slot.left }}px;top:{{ slot.top }}px;width:{{ slot.w }}px;height:{{ slot.h }}px;clip-path:path('{{ slot.clip }}');background:#050608"></div>
+<svg width="{{ slot.w }}" height="{{ slot.h }}" style="position:absolute;left:{{ slot.left }}px;top:{{ slot.top }}px;overflow:visible;pointer-events:none;animation:heroSlotBreathe 2.6s ease-in-out infinite">
+<path d="{{ slot.clip }}" fill="none" stroke="#0052FF" stroke-width="7" style="filter:blur(7px);opacity:.85"></path>
+<path d="{{ slot.clip }}" fill="none" stroke="#4d8bff" stroke-width="2.4"></path>
+</svg>
+</sc-if>
+</sc-for>
+<sc-for list="{{ heroPieces }}" as="pc" hint-placeholder-count="6">
+<sc-if value="{{ pc.visible }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:{{ pc.left }}px;top:{{ pc.top }}px;width:{{ pc.w }}px;height:{{ pc.h }}px;transform:rotate({{ pc.rot }}deg) scale({{ pc.scale }});clip-path:path('{{ pc.clip }}');overflow:hidden;filter:drop-shadow(0 8px 16px rgba(0,0,0,.6))">
+<video src="uploads/jellyfish.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;left:{{ pc.vLeft }}px;top:{{ pc.vTop }}px;width:{{ heroW }}px;height:{{ heroH }}px;object-fit:cover"></video>
+</div>
+</sc-if>
+</sc-for>
+<sc-if value="{{ heroShowGlow }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:{{ heroGlowLeft }}px;top:{{ heroGlowTop }}px;width:640px;height:640px;margin-left:-320px;margin-top:-320px;border-radius:50%;background:radial-gradient(circle,rgba(0,82,255,.55) 0%,rgba(0,82,255,.22) 35%,rgba(0,82,255,0) 70%);pointer-events:none;animation:puzzleGlowRipple 1.4s ease-out"></div>
+</sc-if>
+</div>
+<sc-if value="{{ heroShowCopy }}" hint-placeholder-val="{{ false }}">
+<div style="position:relative;z-index:2;text-align:center;padding:0 24px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-size:clamp(46px,9vw,116px);line-height:.95;letter-spacing:-.01em;margin-bottom:30px;animation:heroHeadlineIn 1.1s cubic-bezier(.2,.9,.3,1.1)">
+<span style="font-weight:400;color:#fff">Puzzles that</span><br/>
+<span style="font-weight:800;color:#0052FF;background-image:linear-gradient(100deg,#0041cc,#3d7bff);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block;animation:heroMoveAmbient 9s ease-in-out infinite">move.</span>
+</div>
+<span onClick="{{ dismissWelcome }}" style="display:inline-block;background:rgba(0,82,255,.08);backdrop-filter:blur(6px);color:#fff;font-size:14px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;padding:16px 40px;border-radius:100px;border:1px solid #0052FF;cursor:pointer;transition:box-shadow .25s ease;animation:heroCopyIn .6s cubic-bezier(.22,1,.36,1) .35s backwards" style-hover="box-shadow:0 0 28px rgba(0,82,255,.6)">Start Playing</span>
+</div>
+</sc-if>
+<div style="position:absolute;bottom:28px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.5);letter-spacing:.08em;text-transform:uppercase;z-index:2">Scroll</div>
+</section>
+
+<section style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:48px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:clamp(28px,4vw,44px);text-align:center;margin-bottom:8px">Live, moving puzzles.</div>
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;width:100%;max-width:1400px;padding:0 40px;box-sizing:border-box">
+<div class="live-tile" style="position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0a0a0a">
+<video src="uploads/clouds_2.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#fff">Clouds</div>
+</div>
+<div class="live-tile" style="position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0a0a0a">
+<video src="uploads/balloons.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#fff">Balloons</div>
+</div>
+<div class="live-tile" style="position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0a0a0a">
+<video src="uploads/fire.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#fff">Fire</div>
+</div>
+<div class="live-tile" style="position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0a0a0a">
+<video src="uploads/murmuration.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#fff">Murmuration</div>
+</div>
+<div class="live-tile" style="position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:#0a0a0a">
+<video src="uploads/jellyfish.mp4" muted="true" loop="true" autoplay="true" playsinline="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+<div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);font-size:13px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;color:#fff">Jellyfish</div>
+</div>
+</div>
+</section>
+
+<section style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:20px">
+<div style="position:relative;width:{{ mtnDemo.boxW }}px;max-width:92vw">
+<div style="position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:120px;width:max-content;z-index:1000;font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:clamp(26px,3.6vw,40px);color:#fff;text-align:center">Rotation changes everything.</div>
+<div style="position:relative;width:{{ mtnDemo.boxW }}px;height:{{ mtnDemo.boxH }}px;max-width:92vw">
+<sc-for list="{{ mtnDemo.pieces }}" as="pc" hint-placeholder-count="25">
+<div style="position:absolute;left:{{ pc.left }}px;top:{{ pc.top }}px;width:{{ pc.w }}px;height:{{ pc.h }}px;transform:rotate({{ pc.rot }}deg) scale({{ pc.scale }});clip-path:path('{{ pc.clip }}');background-image:url('uploads/puzzle-library/full/puz_mountain-valley.jpg');background-size:{{ mtnDemo.boxW }}px {{ mtnDemo.boxH }}px;background-position:{{ pc.bgX }}px {{ pc.bgY }}px;box-shadow:{{ pc.shadow }};z-index:{{ pc.z }}"></div>
+<div style="position:absolute;left:{{ pc.left }}px;top:{{ pc.top }}px;width:{{ pc.w }}px;height:{{ pc.h }}px;border-radius:10px;background:radial-gradient(circle,rgba(0,82,255,.55) 0%,rgba(0,82,255,0) 70%);opacity:{{ pc.glow }};pointer-events:none;transform:scale({{ pc.scale }});z-index:{{ pc.z }}"></div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:44px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:clamp(26px,3.6vw,40px);text-align:center">Curated images.<br/>Every difficulty.</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px;max-width:1140px;width:100%">
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_mountain-valley.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Landscapes / Nature</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Mountain Valley</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_autumn-canopy.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Landscapes / Nature</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Autumn Canopy</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_fox.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Animals / Wildlife</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Fox</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_snow-leopard.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Animals / Wildlife</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Snow Leopard</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_cityscape.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Architecture / Cityscapes</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Cityscape</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_courtyard.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Architecture / Cityscapes</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Courtyard</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_nebula.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Space / Cosmic</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Nebula</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_solar-sys.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Space / Cosmic</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Solar System</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_abstract-swirl.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Abstract / Pattern Art</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Abstract Swirl</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_mosaic.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Abstract / Pattern Art</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Mosaic</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_botanicals.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Florals / Botanical</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Botanicals</div></div>
+<div style="cursor:default"><div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/thumbs/puz_poppies.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Florals / Botanical</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Poppies</div></div>
+<div style="cursor:default"><div style="position:relative;border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/posters/poster_clouds.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Live</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Clouds</div></div>
+<div style="cursor:default"><div style="position:relative;border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/posters/poster_balloons.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Live</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Balloons</div></div>
+<div style="cursor:default"><div style="position:relative;border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/posters/poster_fire.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Live</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Fire</div></div>
+<div style="cursor:default"><div style="position:relative;border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/posters/poster_murmuration.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Live</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Murmuration</div></div>
+<div style="cursor:default"><div style="position:relative;border-radius:8px;overflow:hidden;height:130px;background-image:url('uploads/puzzle-library/posters/poster_jellyfish.jpg');background-size:cover;background-position:center"></div><div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">Live</div><div style="font-size:12px;margin-top:2px;color:#f2ede6">Jellyfish</div></div>
+</div>
+<span onClick="{{ dismissWelcome }}" style="display:inline-block;background:rgba(0,82,255,.08);backdrop-filter:blur(6px);color:#fff;font-size:14px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;padding:16px 40px;border-radius:100px;border:1px solid #0052FF;cursor:pointer;transition:box-shadow .25s ease;margin-top:6px" style-hover="box-shadow:0 0 28px rgba(0,82,255,.6)">Start Playing</span>
+</section>
+
+<section style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:48px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:clamp(26px,3.6vw,40px);text-align:center">Play free. Unlock more.</div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:760px;width:100%">
+
+<div style="flex:1;min-width:280px;max-width:340px;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:32px 28px;display:flex;flex-direction:column;gap:18px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;color:rgba(255,255,255,.55)">FREE</div>
+<div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:rgba(255,255,255,.85)">
+<div>Classic and Live modes</div>
+<div>A curated selection from every category</div>
+<div>All three difficulty tiers</div>
+</div>
+<div style="flex:1"></div>
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:20px;color:#fff">Free</div>
+</div>
+
+<div style="flex:1;min-width:280px;max-width:340px;border:1px solid rgba(0,82,255,.5);box-shadow:0 0 32px rgba(0,82,255,.18);border-radius:14px;padding:32px 28px;display:flex;flex-direction:column;gap:18px">
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;color:#0052FF">PREMIUM</div>
+<div style="display:flex;flex-direction:column;gap:12px;font-size:14px;color:rgba(255,255,255,.85)">
+<div>Full curated library — every image, every clip</div>
+<div>Upload your own photos and videos</div>
+</div>
+<div style="flex:1"></div>
+<div style="font-family:'Archivo Expanded',sans-serif;font-weight:700;font-size:20px;color:#fff">Coming soon</div>
+<span style="display:inline-block;text-align:center;background:rgba(0,82,255,.08);backdrop-filter:blur(6px);color:#fff;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:12px 0;border-radius:100px;border:1px solid #0052FF;cursor:pointer;transition:box-shadow .25s ease" style-hover="box-shadow:0 0 24px rgba(0,82,255,.6)">Notify Me</span>
+</div>
+
+</div>
+</section>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ showApp }}" hint-placeholder-val="{{ true }}">
+<div style="min-height:100vh;background:#100e0c;display:flex;flex-direction:column;align-items:center;font-family:'Plus Jakarta Sans',sans-serif;color:#f2ede6;padding:20px 16px 60px;box-sizing:border-box">
+
+<span onClick="{{ devResetWelcome }}" title="Dev: reset welcome flow" style="position:fixed;left:8px;bottom:8px;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.06);cursor:pointer;z-index:5000"></span>
+
+<sc-if value="{{ showResumePrompt }}" hint-placeholder-val="{{ false }}">
+<div style="position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:3000;padding:40px">
+<div style="background:#0a0a0a;border:1px solid rgba(0,82,255,.35);border-radius:16px;padding:32px 36px;max-width:380px;text-align:center;box-shadow:0 40px 90px rgba(0,0,0,.6)">
+<div style="font-size:17px;font-weight:700;color:#f2ede6;margin-bottom:8px">Resume your puzzle?</div>
+<div style="font-size:13px;color:#8a93a6;margin-bottom:24px">You have an unfinished puzzle — {{ resumeSummary }}.</div>
+<div style="display:flex;gap:10px;justify-content:center">
+<span onClick="{{ startFreshFromPrompt }}" style="font-size:13px;color:#a39a8d;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px 18px;cursor:pointer">Start new</span>
+<span onClick="{{ resumeGame }}" style="font-size:13px;color:#fff;background:#0052FF;border-radius:8px;padding:10px 18px;cursor:pointer;font-weight:700">Resume</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<div style="width:1120px;max-width:100%;display:flex;align-items:center;justify-content:space-between;padding:6px 4px 18px">
+<a href="Jigsaw Concepts.dc.html" style="color:#a39a8d;text-decoration:none;font-size:12px;display:flex;align-items:center;gap:6px">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+Concepts
+</a>
+<div style="display:flex;align-items:center;gap:10px">
+<span style="font-size:15px;font-weight:600">Custom Puzzle</span>
+<span style="font-size:11px;color:#6f6659;padding:3px 9px;border:1px solid rgba(255,255,255,.1);border-radius:12px">{{ difficultyLabel }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:16px;font-size:13px;color:#a39a8d">
+<sc-if value="{{ timerVisible }}" hint-placeholder-val="{{ true }}"><span>{{ timeLabel }}</span></sc-if>
+<span onClick="{{ toggleTimerHidden }}" style="cursor:pointer;display:flex;color:#6f6659"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 16 14"></polyline></svg></span>
+<span>{{ solvedCount }} / {{ totalPieces }}</span>
+</div>
+</div>
+
+<div style="width:1120px;max-width:100%;display:flex;align-items:center;justify-content:center;padding-bottom:14px">
+<div style="display:flex;gap:4px;background:#1a1613;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:4px">
+<sc-for list="{{ contentTypeOptions }}" as="opt" hint-placeholder-count="2">
+<span onClick="{{ opt.onClick }}" style="padding:8px 20px;border-radius:7px;font-size:13px;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};font-weight:{{ opt.weight }}">{{ opt.label }}</span>
+</sc-for>
+</div>
+</div>
+
+<div style="width:1120px;max-width:100%;display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;flex-wrap:wrap;gap:14px">
+<div style="display:flex;gap:4px;background:#1a1613;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:4px">
+<sc-for list="{{ pieceCountOptions }}" as="opt" hint-placeholder-count="3">
+<span onClick="{{ opt.onClick }}" style="padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};font-weight:{{ opt.weight }}">{{ opt.label }}</span>
+</sc-for>
+</div>
+<div style="display:flex;gap:4px;background:#1a1613;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:4px">
+<sc-for list="{{ difficultyOptions }}" as="opt" hint-placeholder-count="3">
+<span onClick="{{ opt.onClick }}" style="padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};font-weight:{{ opt.weight }}">{{ opt.label }}</span>
+</sc-for>
+</div>
+<div style="display:flex;gap:10px;align-items:center">
+<span onClick="{{ toggleGhost }}" style="display:flex;align-items:center;gap:6px;font-size:12px;color:{{ ghostColor }};border:1px solid {{ ghostBorder }};border-radius:8px;padding:7px 12px;cursor:pointer">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+Ghost preview
+</span>
+<span onClick="{{ triggerHint }}" style="display:flex;align-items:center;gap:6px;font-size:12px;color:{{ hintColor }};border:1px solid {{ hintBorder }};border-radius:8px;padding:7px 12px;cursor:{{ hintCursor }}">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-2.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"></path></svg>
+Hint
+</span>
+<span onClick="{{ newGameClick }}" style="font-size:12px;color:#100e0c;background:#3fae7d;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:700">New game</span>
+<sc-if value="{{ isStaticContent }}" hint-placeholder-val="{{ true }}">
+<span onClick="{{ toggleLibrary }}" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#3fae7d;border:1px solid rgba(63,174,125,.3);border-radius:8px;padding:7px 12px;cursor:pointer">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg>
+Change image · {{ currentImageLabel }}
+</span>
+</sc-if>
+<sc-if value="{{ isVideoContent }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:4px;background:#1a1613;border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:4px">
+<sc-for list="{{ videoOptions }}" as="opt" hint-placeholder-count="5">
+<span onClick="{{ opt.onClick }}" style="padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};font-weight:{{ opt.weight }}">{{ opt.label }}</span>
+</sc-for>
+</div>
+</sc-if>
+<div style="display:flex;gap:6px;align-items:center;padding-left:6px;border-left:1px solid rgba(255,255,255,.08);margin-left:2px">
+<sc-for list="{{ bgOptions }}" as="opt" hint-placeholder-count="4">
+<span onClick="{{ opt.onClick }}" style="width:20px;height:20px;border-radius:50%;background:{{ opt.bgCss }};box-shadow:{{ opt.ring }};cursor:pointer"></span>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="font-size:12px;color:#6f6659;padding-bottom:14px;text-align:center">{{ helpText }}</div>
+
+<div ref="{{ setStageHostRef }}" style="width:100%;max-width:1120px;margin:0 auto">
+<div style="position:relative;width:{{ stageBoxW }}px;height:{{ stageBoxH }}px;background:{{ pageBg }};border-radius:8px;overflow:hidden">
+<div ref="{{ setStageRef }}" onClick="{{ deselect }}" style="position:absolute;top:0;left:0;width:1120px;height:760px;transform:scale({{ stageScale }});transform-origin:top left">
+<div style="position:absolute;left:140px;top:140px;width:840px;height:480px;border:1px dashed {{ boardOutline }};border-radius:4px;pointer-events:none"></div>
+<sc-if value="{{ showGhostImage }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:140px;top:140px;width:840px;height:480px;border-radius:4px;background-image:url('{{ imageSrc }}');background-size:840px 480px;background-position:center;opacity:.32;pointer-events:none"></div></sc-if>
+<sc-if value="{{ showGhostVideo }}" hint-placeholder-val="{{ false }}"><video ref="{{ setGhostVideoRef }}" muted="true" loop="true" playsinline="true" autoplay="true" style="position:absolute;left:140px;top:140px;width:840px;height:480px;border-radius:4px;object-fit:cover;opacity:.32;pointer-events:none"></video></sc-if>
+
+<sc-if value="{{ hintRect }}" hint-placeholder-val="{{ null }}">
+<div style="position:absolute;left:{{ hintRect.left }}px;top:{{ hintRect.top }}px;width:{{ hintRect.w }}px;height:{{ hintRect.h }}px;border:2px solid #3fae7d;border-radius:8px;box-shadow:0 0 22px rgba(63,174,125,.6);pointer-events:none"></div>
+</sc-if>
+
+<sc-if value="{{ isImageMode }}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{ pieces }}" as="p" hint-placeholder-count="48">
+<div onPointerDown="{{ p.onDown }}" onPointerMove="{{ p.onMove }}" onPointerUp="{{ p.onUp }}" onDoubleClick="{{ p.onDouble }}" style="position:absolute;left:{{ p.left }}px;top:{{ p.top }}px;width:{{ p.w }}px;height:{{ p.h }}px;transform:{{ p.transform }};clip-path:path('{{ p.clip }}');background-image:url('{{ imageSrc }}');background-size:840px 480px;background-position:{{ p.bgX }}px {{ p.bgY }}px;cursor:{{ p.cursor }};z-index:{{ p.z }};box-shadow:{{ p.shadow }};filter:{{ p.filter }};transition:{{ p.transition }};touch-action:none"></div>
+</sc-for>
+</sc-if>
+
+<sc-if value="{{ isVideoMode }}" hint-placeholder-val="{{ false }}">
+<video ref="{{ setVideoRef }}" muted="true" loop="true" playsinline="true" autoplay="true" style="position:absolute;width:2px;height:2px;opacity:0;pointer-events:none"></video>
+<canvas ref="{{ setCanvasRef }}" width="1120" height="760" onPointerDown="{{ canvasPointerDown }}" onPointerMove="{{ canvasPointerMove }}" onPointerUp="{{ canvasPointerUp }}" onDoubleClick="{{ canvasDoubleClick }}" style="position:absolute;left:0;top:0;width:1120px;height:760px;cursor:{{ canvasCursor }};touch-action:none"></canvas>
+</sc-if>
+
+<sc-if value="{{ introPulse }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:140px;top:140px;width:840px;height:480px;border-radius:4px;box-shadow:0 0 0 2px rgba(0,82,255,.4), 0 0 46px rgba(0,82,255,.4);pointer-events:none;z-index:50;opacity:0;animation:introNudgeGlow 1.8s ease-in-out infinite"></div>
+</sc-if>
+
+<sc-if value="{{ handle }}" hint-placeholder-val="{{ null }}">
+<sc-if value="{{ handle.isButton }}"><div onClick="{{ handle.onClick }}" style="position:absolute;left:{{ handle.left }}px;top:{{ handle.top }}px;width:34px;height:34px;border-radius:50%;background:#3fae7d;color:#100e0c;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.5);z-index:900"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><polyline points="21 3 21 9 15 9"></polyline></svg></div></sc-if>
+<sc-if value="{{ handle.isDrag }}"><div onPointerDown="{{ handle.onDown }}" onPointerMove="{{ handle.onMove }}" onPointerUp="{{ handle.onUp }}" style="position:absolute;left:{{ handle.left }}px;top:{{ handle.top }}px;width:34px;height:34px;border-radius:50%;background:#3fae7d;color:#100e0c;display:flex;align-items:center;justify-content:center;cursor:grab;box-shadow:0 6px 16px rgba(0,0,0,.5);z-index:900;touch-action:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><polyline points="21 3 21 9 15 9"></polyline></svg></div></sc-if>
+</sc-if>
+
+<sc-if value="{{ libraryOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ toggleLibrary }}" style="position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:2000;padding:40px">
+<div onClick="{{ stopClick }}" style="background:#171310;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:28px;max-width:1240px;width:100%;max-height:82vh;overflow:auto;box-shadow:0 40px 90px rgba(0,0,0,.6)">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+<span style="font-size:16px;font-weight:700;color:#f2ede6">Choose an image</span>
+<span onClick="{{ toggleLibrary }}" style="cursor:pointer;color:#a39a8d;font-size:13px">Close</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px">
+<sc-for list="{{ libraryItems }}" as="item" hint-placeholder-count="12">
+<div onClick="{{ item.onClick }}" style="cursor:pointer">
+<div style="border-radius:8px;overflow:hidden;height:130px;background-image:url('{{ item.thumb }}');background-size:cover;background-position:center;box-shadow:{{ item.ring }}"></div>
+<div style="font-size:10px;margin-top:8px;color:#7a7267;text-transform:uppercase;letter-spacing:.04em">{{ item.category }}</div>
+<div style="font-size:12px;margin-top:2px;color:#f2ede6">{{ item.label }}</div>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWon }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:140px;top:140px;width:840px;height:480px;border-radius:4px;overflow:hidden;z-index:1500">
+<sc-if value="{{ isImageMode }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;inset:0;background-image:url('{{ imageSrc }}');background-size:cover;background-position:center;animation:puzzleZoomOut 3.5s ease-out forwards"></div>
+<div style="position:absolute;inset:0;background:linear-gradient(75deg,transparent 40%,rgba(255,255,255,.35) 50%,transparent 60%);animation:puzzleLightSweep 1.6s ease-out .1s"></div>
+</sc-if>
+<sc-if value="{{ isVideoMode }}" hint-placeholder-val="{{ false }}">
+<video ref="{{ setRevealVideoRef }}" muted="true" loop="true" playsinline="true" autoplay="true" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:puzzleFadeIn .5s ease-out"></video>
+</sc-if>
+</div>
+<div style="position:absolute;left:560px;top:380px;width:640px;height:640px;margin-left:-320px;margin-top:-320px;border-radius:50%;background:radial-gradient(circle,rgba(0,82,255,.55) 0%,rgba(0,82,255,.22) 35%,rgba(0,82,255,0) 70%);pointer-events:none;z-index:1600;animation:puzzleGlowRipple 1.4s ease-out"></div>
+<sc-if value="{{ showStatsCard }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);z-index:1700">
+<div style="background:#0a0a0a;border:1px solid rgba(0,82,255,.4);border-radius:16px;padding:32px 40px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 40px rgba(0,82,255,.15);animation:statsPopIn .45s cubic-bezier(.22,1,.36,1)">
+<div style="font-size:20px;font-weight:700;margin-bottom:6px;color:#f2ede6">Solved!</div>
+<div style="font-size:13px;color:#8a93a6;margin-bottom:18px">Finished in {{ timeLabel }}</div>
+<sc-if value="{{ hasBestTimes }}" hint-placeholder-val="{{ false }}">
+<div style="margin-bottom:20px">
+<div style="font-size:10px;color:#5f6578;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Best times · this puzzle</div>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:200px">
+<sc-for list="{{ bestTimesRows }}" as="row" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;padding:5px 10px;border-radius:6px;background:{{ row.bg }}">
+<span style="font-size:12px;color:{{ row.color }}">#{{ row.rank }}</span>
+<span style="font-size:12px;color:{{ row.color }};font-weight:{{ row.weight }}">{{ row.label }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+<span onClick="{{ newGameClick }}" style="display:inline-block;font-size:13px;color:#fff;background:#0052FF;border-radius:8px;padding:10px 22px;cursor:pointer;font-weight:700">Play again</span>
+</div>
+</div>
+</sc-if>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;defaultDifficulty&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;moderate&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;easy&quot;, &quot;moderate&quot;, &quot;hard&quot;], &quot;section&quot;: &quot;Gameplay&quot;},
+  &quot;defaultPieceCount&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;48&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;options&quot;: [&quot;25&quot;, &quot;48&quot;, &quot;96&quot;], &quot;section&quot;: &quot;Gameplay&quot;}
+}">
+class Component extends DCLogic {
+  BEST_TIMES_KEY = 'jigsaw_best_times_v1';
+  PROGRESS_KEY = 'jigsaw_progress_v1';
+  state = { pieces: [], solvedCount: 0, selectedId: null, rows: 6, cols: 8, difficulty: 'moderate', showGhost: false, hintPieceId: null, timerHidden: false, elapsedSec: 0, startTime: Date.now(), pulseGroupId: null, draggingGroupId: null, stageScale: 1, bgColor: '#333333', mode: 'image', contentType: 'static', imageSrc: 'uploads/puzzle-library/full/puz_mountain-valley.jpg', videoSrc: 'uploads/balloons.mp4', libraryOpen: false, showResumePrompt: false, pendingResume: null, showStatsCard: false, introPhase: null, introPulse: false,
+    heroW: 1440, heroH: 810, heroCopyRevealed: false,
+    showWelcome: (() => {
+      try { return !localStorage.getItem('jigsaw_welcomed_v1'); } catch (e) { return false; }
+    })() };
+
+  devResetWelcome = () => {
+    try { localStorage.removeItem('jigsaw_welcomed_v1'); } catch (e) {}
+    window.location.reload();
+  };
+
+  isValidProgress(saved) {
+    if (!saved || typeof saved !== 'object') return false;
+    if (!Array.isArray(saved.pieces) || !saved.pieces.length) return false;
+    const rows = saved.rows, cols = saved.cols;
+    if (!Number.isFinite(rows) || !Number.isFinite(cols) || rows <= 0 || cols <= 0) return false;
+    if (saved.pieces.length !== rows * cols) return false;
+    if (!['easy', 'moderate', 'hard'].includes(saved.difficulty)) return false;
+    if (!Number.isFinite(saved.elapsedSec)) return false;
+    return true;
+  }
+
+  componentDidMount() {
+    let saved = null;
+    try { saved = this.loadProgress(); if (!this.isValidProgress(saved)) { saved = null; this.clearProgress(); } } catch (e) { saved = null; }
+    if (saved) {
+      this.setState({ showResumePrompt: true, pendingResume: saved });
+    } else {
+      const d = this.props.defaultDifficulty || 'moderate';
+      const n = Number(this.props.defaultPieceCount || 48);
+      const preset = { 25: [5, 5], 48: [6, 8], 96: [8, 12] }[n] || [6, 8];
+      this.newGame(preset[0], preset[1], d);
+    }
+    if (this.state.showWelcome) {
+      this._heroRaf = requestAnimationFrame(this.heroTick);
+      this._rotDemoRaf = requestAnimationFrame(this.rotDemoTick);
+      this._mtnDemoRaf = requestAnimationFrame(this.mtnDemoTick);
+      window.addEventListener('resize', this.measureHero);
+      requestAnimationFrame(this.measureHero);
+    }
+    this._timer = setInterval(() => {
+      if (this.state.pieces.length && !this.state.introPhase && this.state.solvedCount !== this.state.pieces.length) {
+        this.setState(s => ({ elapsedSec: Math.floor((Date.now() - s.startTime) / 1000) }));
+      }
+    }, 1000);
+    this._saveTimer = setInterval(this.saveProgress, 5000);
+    window.addEventListener('resize', this.measureScale);
+    requestAnimationFrame(this.measureScale);
+    this._raf = requestAnimationFrame(this.drawVideoFrame);
+  }
+  componentWillUnmount() { clearInterval(this._timer); clearInterval(this._saveTimer); clearTimeout(this._hintTO); clearTimeout(this._pulseTO); clearTimeout(this._statsTO); clearTimeout(this._introHoldTO); clearTimeout(this._introFallbackTO); clearTimeout(this._introPulseTO); cancelAnimationFrame(this._introRaf); cancelAnimationFrame(this._heroRaf); cancelAnimationFrame(this._rotDemoRaf); cancelAnimationFrame(this._mtnDemoRaf); window.removeEventListener('resize', this.measureScale); window.removeEventListener('resize', this.measureHero); cancelAnimationFrame(this._raf); }
+
+  computeDerivedDims(rows, cols) {
+    const boardW = 840, boardH = 480;
+    const cellW = boardW / cols, cellH = boardH / rows;
+    this.cellW = cellW; this.cellH = cellH;
+    this.magnetRadius = Math.min(cellW, cellH) * 0.9;
+    this.snapTol = Math.max(14, Math.min(cellW, cellH) * 0.24);
+  }
+
+  configKey(s) {
+    const src = s.contentType === 'video' ? s.videoSrc : s.imageSrc;
+    return `${src}|${s.difficulty}|${s.rows}x${s.cols}`;
+  }
+  recordBestTime(time) {
+    const key = this.configKey(this.state);
+    let all = {};
+    try { all = JSON.parse(localStorage.getItem(this.BEST_TIMES_KEY) || '{}'); } catch (e) {}
+    const list = (all[key] || []).concat([time]).sort((a, b) => a - b).slice(0, 5);
+    all[key] = list;
+    try { localStorage.setItem(this.BEST_TIMES_KEY, JSON.stringify(all)); } catch (e) {}
+  }
+
+  saveProgress = () => {
+    const s = this.state;
+    if (!s.pieces.length || s.solvedCount === s.pieces.length || s.showResumePrompt) return;
+    try {
+      localStorage.setItem(this.PROGRESS_KEY, JSON.stringify({
+        pieces: s.pieces, rows: s.rows, cols: s.cols, difficulty: s.difficulty,
+        contentType: s.contentType, imageSrc: s.imageSrc, videoSrc: s.videoSrc, bgColor: s.bgColor,
+        elapsedSec: s.elapsedSec, savedAt: Date.now()
+      }));
+    } catch (e) {}
+  };
+  loadProgress() { try { const raw = localStorage.getItem(this.PROGRESS_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+  clearProgress() { try { localStorage.removeItem(this.PROGRESS_KEY); } catch (e) {} }
+
+  handleWin = () => {
+    if (this._wonHandled) return;
+    this._wonHandled = true;
+    this.clearProgress();
+    this.recordBestTime(this.state.elapsedSec);
+    this.playWinChime();
+    clearTimeout(this._statsTO);
+    this.setState({ showStatsCard: false });
+    this._statsTO = setTimeout(() => this.setState({ showStatsCard: true }), 900);
+  };
+
+  resumeGame = () => {
+    const saved = this.state.pendingResume;
+    if (!saved || !this.isValidProgress(saved)) { this.startFreshFromPrompt(); return; }
+    this._pathCache = {};
+    this._wonHandled = false;
+    this.computeDerivedDims(saved.rows, saved.cols);
+    this.setState({
+      pieces: saved.pieces, rows: saved.rows, cols: saved.cols, difficulty: saved.difficulty,
+      contentType: saved.contentType, mode: saved.contentType === 'video' ? 'video' : 'image',
+      imageSrc: saved.imageSrc, videoSrc: saved.videoSrc, bgColor: saved.bgColor || this.state.bgColor,
+      elapsedSec: saved.elapsedSec, startTime: Date.now() - saved.elapsedSec * 1000,
+      solvedCount: saved.pieces.filter(p => p.solved).length,
+      showResumePrompt: false, pendingResume: null, selectedId: null, draggingGroupId: null, pulseGroupId: null, hintPieceId: null, showStatsCard: false
+    });
+    if (saved.contentType === 'video' && this.videoEl) { this.videoEl.currentTime = 0; this.videoEl.play().catch(() => {}); }
+  };
+  startFreshFromPrompt = () => {
+    this.clearProgress();
+    this.setState({ showResumePrompt: false, pendingResume: null });
+    const d = this.props.defaultDifficulty || 'moderate';
+    const n = Number(this.props.defaultPieceCount || 48);
+    const preset = { 25: [5, 5], 48: [6, 8], 96: [8, 12] }[n] || [6, 8];
+    this.newGame(preset[0], preset[1], d);
+  };
+  setRevealVideoRef = (el) => {
+    if (!el) return;
+    if (!el.src) el.src = this.state.videoSrc;
+    try { el.currentTime = (this.videoEl && this.videoEl.currentTime) || 0; } catch (e) {}
+    el.play().catch(() => {});
+  };
+
+  setCanvasRef = (el) => { this.canvasEl = el; };
+  setVideoRef = (el) => {
+    this.videoEl = el;
+    if (el) {
+      el.loop = true; el.muted = true;
+      if (!el.src) el.src = this.state.videoSrc;
+      el.addEventListener('ended', () => { el.currentTime = 0; el.play().catch(() => {}); });
+    }
+  };
+  setGhostVideoRef = (el) => {
+    this.ghostVideoEl = el;
+    if (el && !el.src) el.src = this.state.videoSrc;
+  };
+  getPath2D(p) {
+    if (!this._pathCache) this._pathCache = {};
+    if (!this._pathCache[p.id] || this._pathCache[p.id]._d !== p.pathD) {
+      const path = new Path2D(p.pathD); path._d = p.pathD; this._pathCache[p.id] = path;
+    }
+    return this._pathCache[p.id];
+  }
+  localPointForPiece(p, mx, my) {
+    const lx = mx - p.curLeft, ly = my - p.curTop;
+    if (!p.rotation) return { x: lx, y: ly };
+    const cx = p.boxW / 2, cy = p.boxH / 2, rad = -p.rotation * Math.PI / 180;
+    const dx = lx - cx, dy = ly - cy, cos = Math.cos(rad), sin = Math.sin(rad);
+    return { x: dx * cos - dy * sin + cx, y: dx * sin + dy * cos + cy };
+  }
+  hitTestPiece(mx, my, includeSolved) {
+    const s = this.state;
+    if (!this._hitCtx) this._hitCtx = document.createElement('canvas').getContext('2d');
+    const pool = includeSolved ? s.pieces : s.pieces.filter(p => !p.solved);
+    const dragging = pool.filter(p => s.draggingGroupId && p.groupId === s.draggingGroupId);
+    const rest = pool.filter(p => !(s.draggingGroupId && p.groupId === s.draggingGroupId)).slice().reverse();
+    for (const p of [...dragging, ...rest]) {
+      const path = this.getPath2D(p);
+      const local = this.localPointForPiece(p, mx, my);
+      if (this._hitCtx.isPointInPath(path, local.x, local.y)) return p;
+    }
+    return null;
+  }
+  canvasPointerDown = (e) => {
+    if (!this.canvasEl || this.state.introPhase) return;
+    const rect = this.canvasEl.getBoundingClientRect(), scale = this.state.stageScale || 1;
+    const mx = (e.clientX - rect.left) / scale, my = (e.clientY - rect.top) / scale;
+    const hit = this.hitTestPiece(mx, my, true);
+    if (hit) { e.currentTarget.setPointerCapture(e.pointerId); this.onPieceDown(hit.id, e); }
+  };
+  canvasPointerMove = (e) => this.onPieceMove(null, e);
+  canvasPointerUp = (e) => this.onPieceUp(null, e);
+  canvasDoubleClick = (e) => {
+    if (!this.canvasEl) return;
+    const rect = this.canvasEl.getBoundingClientRect(), scale = this.state.stageScale || 1;
+    const mx = (e.clientX - rect.left) / scale, my = (e.clientY - rect.top) / scale;
+    const hit = this.hitTestPiece(mx, my, true);
+    if (hit) this.onPieceDouble(hit.id, e);
+  };
+
+  drawVideoFrame = () => {
+    this._raf = requestAnimationFrame(this.drawVideoFrame);
+    if (this.state.mode !== 'video' || !this.canvasEl || !this.videoEl || this.videoEl.readyState < 2) return;
+    const now = performance.now();
+    if (this._lastCanvasDraw && now - this._lastCanvasDraw < 55) return;
+    this._lastCanvasDraw = now;
+    const ctx = this.canvasEl.getContext('2d');
+    ctx.clearRect(0, 0, 1120, 760);
+    const boardW = 840, boardH = 480;
+    const vw = this.videoEl.videoWidth || boardW, vh = this.videoEl.videoHeight || boardH;
+    const k = Math.min(vw / boardW, vh / boardH);
+    const cropW = boardW * k, cropH = boardH * k, cropX = (vw - cropW) / 2, cropY = (vh - cropH) / 2;
+    const s = this.state;
+    const solved = s.pieces.filter(p => p.solved);
+    const dragging = s.draggingGroupId ? s.pieces.filter(p => !p.solved && p.groupId === s.draggingGroupId) : [];
+    const rest = s.pieces.filter(p => !p.solved && !(s.draggingGroupId && p.groupId === s.draggingGroupId));
+    for (const p of [...solved, ...rest, ...dragging]) {
+      const isDragging = s.draggingGroupId != null && p.groupId === s.draggingGroupId && !p.solved;
+      const isClustered = !isDragging && this.groupSize(p.groupId) > 1;
+      const lift = isDragging ? -6 : 0;
+      const path = this.getPath2D(p);
+      ctx.save();
+      if (p.solved || isClustered) ctx.filter = 'none';
+      else if (isDragging) ctx.filter = 'drop-shadow(0 18px 20px rgba(0,0,0,0.55))';
+      else ctx.filter = 'drop-shadow(0 3px 4px rgba(0,0,0,0.3))';
+      ctx.translate(p.curLeft, p.curTop + lift);
+      const cx = p.boxW / 2, cy = p.boxH / 2;
+      const liftScale = isDragging ? 1.09 : 1;
+      ctx.translate(cx, cy); ctx.rotate(p.rotation * Math.PI / 180); ctx.scale(1.014 * liftScale, 1.014 * liftScale); ctx.translate(-cx, -cy);
+      ctx.clip(path);
+      ctx.drawImage(this.videoEl, cropX - p.bgPosX * k, cropY - p.bgPosY * k, p.boxW * k, p.boxH * k, 0, 0, p.boxW, p.boxH);
+      ctx.restore();
+    }
+  };
+
+  setContentType = (type) => {
+    const mode = type === 'video' ? 'video' : 'image';
+    this.setState({ contentType: type, mode });
+    if (this.videoEl) { if (mode === 'video') { this.videoEl.currentTime = 0; this.videoEl.play().catch(() => {}); } else this.videoEl.pause(); }
+  };
+  toggleLibrary = () => this.setState(s => ({ libraryOpen: !s.libraryOpen }));
+  stopClick = (e) => e.stopPropagation();
+  selectImage = (src) => {
+    this.setState({ imageSrc: src, libraryOpen: false });
+    this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
+  };
+  selectVideo = (src) => {
+    this.setState({ videoSrc: src });
+    if (this.videoEl) {
+      this.videoEl.pause(); this.videoEl.src = src;
+      setTimeout(() => { if (this.videoEl) { this.videoEl.load(); if (this.state.mode === 'video') this.videoEl.play().catch(() => {}); } }, 0);
+    }
+    if (this.ghostVideoEl) this.ghostVideoEl.src = src;
+  };
+
+  setStageRef = (el) => { this.stageEl = el; };
+  setStageHostRef = (el) => {
+    if (el && el !== this.hostEl) { this.hostEl = el; this.measureScale(); }
+    else if (!el) { this.hostEl = null; }
+  };
+  measureScale = () => {
+    if (this._measureScheduled) return;
+    this._measureScheduled = true;
+    requestAnimationFrame(() => {
+      this._measureScheduled = false;
+      if (!this.hostEl) return;
+      const w = this.hostEl.clientWidth;
+      if (!w) return;
+      const scale = Math.min(1, w / 1120);
+      if (Math.abs(scale - this.state.stageScale) > 0.005) this.setState({ stageScale: scale });
+    });
+  };
+
+  randEdgeParams() { return { dir: Math.random() < 0.5 ? 1 : -1, size: 0.85 + Math.random() * 0.45, pinch: 0.15 + Math.random() * 0.75 }; }
+
+  buildEdge(P0, P1, isBorder, outward, params) {
+    if (isBorder) return ` L ${P1.x} ${P1.y}`;
+    const dx = P1.x - P0.x, dy = P1.y - P0.y;
+    const L = Math.sqrt(dx * dx + dy * dy), ux = dx / L, uy = dy / L;
+    const nx = uy, ny = -ux;
+    const pt = (t) => ({ x: P0.x + ux * t * L, y: P0.y + uy * t * L });
+    // fixed, direction-symmetric params (t and 1-t both land on identical points) so a shared edge
+    // traced from either neighboring piece produces the exact same curve — no seam/gap between them.
+    const tN1 = 0.34, tN2 = 0.66, tS1 = 0.27, tS2 = 0.73;
+    const r = params.size * 0.17 * L;
+    const sign = outward ? 1 : -1;
+    const sox = nx * sign, soy = ny * sign;
+    const S1 = pt(tS1), A = pt(tN1), B = pt(tN2), S2 = pt(tS2);
+    const pinchAmt = params.pinch * r * 0.85, bulgeAmt = r * 1.5;
+    const c1a = { x: S1.x - sox * pinchAmt, y: S1.y - soy * pinchAmt };
+    const c1b = { x: A.x - sox * pinchAmt * 0.55, y: A.y - soy * pinchAmt * 0.55 };
+    const c2a = { x: A.x + sox * bulgeAmt, y: A.y + soy * bulgeAmt };
+    const c2b = { x: B.x + sox * bulgeAmt, y: B.y + soy * bulgeAmt };
+    const c3a = { x: B.x - sox * pinchAmt * 0.55, y: B.y - soy * pinchAmt * 0.55 };
+    const c3b = { x: S2.x - sox * pinchAmt, y: S2.y - soy * pinchAmt };
+    const f = (n) => n.toFixed(2);
+    return ` L ${f(S1.x)} ${f(S1.y)} C ${f(c1a.x)} ${f(c1a.y)} ${f(c1b.x)} ${f(c1b.y)} ${f(A.x)} ${f(A.y)} C ${f(c2a.x)} ${f(c2a.y)} ${f(c2b.x)} ${f(c2b.y)} ${f(B.x)} ${f(B.y)} C ${f(c3a.x)} ${f(c3a.y)} ${f(c3b.x)} ${f(c3b.y)} ${f(S2.x)} ${f(S2.y)} L ${P1.x} ${P1.y}`;
+  }
+
+  generateGeometry(rows, cols, difficulty) {
+    const boardW = 840, boardH = 480, stageW = 1120, stageH = 760;
+    const cellW = boardW / cols, cellH = boardH / rows;
+    const pad = Math.min(cellW, cellH) * 0.4;
+    const boxW = cellW + 2 * pad, boxH = cellH + 2 * pad;
+    const boardOffsetX = (stageW - boardW) / 2, boardOffsetY = (stageH - boardH) / 2;
+    const hEdge = []; for (let r = 0; r < rows - 1; r++) { hEdge.push([]); for (let c = 0; c < cols; c++) hEdge[r].push(this.randEdgeParams()); }
+    const vEdge = []; for (let r = 0; r < rows; r++) { vEdge.push([]); for (let c = 0; c < cols - 1; c++) vEdge[r].push(this.randEdgeParams()); }
+    const pieces = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cellLeft = c * cellW, cellTop = r * cellH;
+        const TL = { x: pad, y: pad }, TR = { x: pad + cellW, y: pad }, BR = { x: pad + cellW, y: pad + cellH }, BL = { x: pad, y: pad + cellH };
+        const topEdge = r > 0 ? hEdge[r - 1][c] : null;
+        const rightEdge = c < cols - 1 ? vEdge[r][c] : null;
+        const bottomEdge = r < rows - 1 ? hEdge[r][c] : null;
+        const leftEdge = c > 0 ? vEdge[r][c - 1] : null;
+        const topOutward = topEdge ? topEdge.dir === -1 : false;
+        const rightOutward = rightEdge ? rightEdge.dir === 1 : false;
+        const bottomOutward = bottomEdge ? bottomEdge.dir === 1 : false;
+        const leftOutward = leftEdge ? leftEdge.dir === -1 : false;
+        const d = this.buildEdge(TL, TR, r === 0, topOutward, topEdge || {}) + this.buildEdge(TR, BR, c === cols - 1, rightOutward, rightEdge || {}) + this.buildEdge(BR, BL, r === rows - 1, bottomOutward, bottomEdge || {}) + this.buildEdge(BL, TL, c === 0, leftOutward, leftEdge || {});
+        const pathD = `M ${TL.x} ${TL.y} ${d} Z`;
+        const homeLeft = boardOffsetX + cellLeft - pad, homeTop = boardOffsetY + cellTop - pad;
+        let rotation = 0;
+        if (difficulty === 'moderate') rotation = 90 * Math.floor(Math.random() * 4);
+        else if (difficulty === 'hard') rotation = Math.random() * 360;
+        const scatterLeft = Math.round(Math.random() * (stageW - boxW)), scatterTop = Math.round(Math.random() * (stageH - boxH));
+        const staggerDelay = Math.round(Math.random() * 150), animDur = 480 + Math.round(Math.random() * 240);
+        pieces.push({ id: `${r}-${c}`, groupId: `${r}-${c}`, homeLeft, homeTop, curLeft: homeLeft, curTop: homeTop, scatterLeft, scatterTop, scatterRotation: rotation, rotation: 0, solved: false, boxW, boxH, bgPosX: -(cellLeft - pad), bgPosY: -(cellTop - pad), pathD, staggerDelay, animDur });
+      }
+    }
+    this.cellW = cellW; this.cellH = cellH;
+    this.magnetRadius = Math.min(cellW, cellH) * 0.9;
+    this.snapTol = Math.max(14, Math.min(cellW, cellH) * 0.24);
+    return pieces;
+  }
+
+  newGame = (rows, cols, difficulty) => {
+    this._pathCache = {};
+    this._wonHandled = false;
+    clearTimeout(this._statsTO);
+    clearTimeout(this._introHoldTO);
+    clearTimeout(this._introFallbackTO);
+    clearTimeout(this._introPulseTO);
+    cancelAnimationFrame(this._introRaf);
+    this.clearProgress();
+    const pieces = this.generateGeometry(rows, cols, difficulty);
+    const isVideo = this.state.mode === 'video';
+    if (isVideo && this.videoEl) { try { this.videoEl.currentTime = 0; this.videoEl.play().catch(() => {}); } catch (e) {} }
+    this.setState({ pieces, solvedCount: 0, selectedId: null, rows, cols, difficulty, startTime: Date.now(), elapsedSec: 0, hintPieceId: null, draggingGroupId: null, pulseGroupId: null, showStatsCard: false, introPhase: 'hold', introPulse: false });
+    this._introPulseTO = setTimeout(() => { if (this.state.introPhase === 'hold') this.setState({ introPulse: true }); }, 4500);
+    this._introFallbackTO = setTimeout(() => { if (this.state.introPhase === 'hold') this.beginBreakApart(); }, 9000);
+  };
+
+  beginBreakApart = () => {
+    clearTimeout(this._introFallbackTO);
+    clearTimeout(this._introPulseTO);
+    const basePieces = this.state.pieces;
+    if (!basePieces.length) { this.setState({ introPhase: null, introPulse: false }); return; }
+    this.setState({ introPhase: 'breaking', introPulse: false });
+    const ease = (t) => 1 - Math.pow(1 - t, 3);
+    const totalDuration = basePieces.reduce((m, p) => Math.max(m, p.staggerDelay + p.animDur), 700);
+    const start = performance.now();
+    const tick = (now) => {
+      const elapsed = now - start;
+      const pieces = basePieces.map(p => {
+        const localT = Math.min(1, Math.max(0, (elapsed - p.staggerDelay) / p.animDur));
+        const e = ease(localT);
+        return { ...p, curLeft: p.homeLeft + (p.scatterLeft - p.homeLeft) * e, curTop: p.homeTop + (p.scatterTop - p.homeTop) * e, rotation: (p.scatterRotation) * e };
+      });
+      if (elapsed < totalDuration) {
+        this.setState({ pieces });
+        this._introRaf = requestAnimationFrame(tick);
+      } else {
+        this.setState({ pieces: basePieces.map(p => ({ ...p, curLeft: p.scatterLeft, curTop: p.scatterTop, rotation: p.scatterRotation })), introPhase: null, startTime: Date.now(), elapsedSec: 0 });
+        if (this.state.mode === 'video' && this.videoEl) { try { this.videoEl.play().catch(() => {}); } catch (e) {} }
+      }
+    };
+    this._introRaf = requestAnimationFrame(tick);
+  };
+  newGameClick = () => this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
+  setPieceCount(n) { const preset = { 25: [5, 5], 48: [6, 8], 96: [8, 12] }[n]; this.newGame(preset[0], preset[1], this.state.difficulty); }
+  setDifficulty(d) { this.newGame(this.state.rows, this.state.cols, d); }
+
+  updatePiece(id, patch) { this.setState(s => ({ pieces: s.pieces.map(p => p.id === id ? { ...p, ...patch } : p) })); }
+
+  isRotationOk(rot, difficulty) {
+    if (difficulty === 'easy') return true;
+    const n = ((rot % 360) + 360) % 360, dist = Math.min(n, 360 - n);
+    if (difficulty === 'moderate') return dist < 1;
+    return dist <= 8;
+  }
+
+  pulse(groupId, ms) {
+    clearTimeout(this._pulseTO);
+    this.setState({ pulseGroupId: groupId });
+    this._pulseTO = setTimeout(() => this.setState({ pulseGroupId: null }), ms || 320);
+  }
+
+  groupSize(groupId) { return this.state.pieces.filter(p => p.groupId === groupId && !p.solved).length; }
+
+  computeMagnetOffset(groupId, pieces) {
+    const tol = this.magnetRadius;
+    const groupMembers = pieces.filter(p => p.groupId === groupId && !p.solved);
+    if (!groupMembers.length) return null;
+    let best = null;
+    const anchor = groupMembers[0];
+    if (this.isRotationOk(anchor.rotation, this.state.difficulty)) {
+      const dx = anchor.homeLeft - anchor.curLeft, dy = anchor.homeTop - anchor.curTop, dist = Math.hypot(dx, dy);
+      if (dist < tol) best = { dx, dy, dist };
+    }
+    for (const p of groupMembers) {
+      const [r, c] = p.id.split('-').map(Number);
+      for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]) {
+        const q = pieces.find(pp => pp.id === `${nr}-${nc}`);
+        if (!q || q.solved || q.groupId === groupId) continue;
+        if (!this.isRotationOk(p.rotation, this.state.difficulty) || !this.isRotationOk(q.rotation, this.state.difficulty)) continue;
+        const targetLeft = q.curLeft + (p.homeLeft - q.homeLeft), targetTop = q.curTop + (p.homeTop - q.homeTop);
+        const dx = targetLeft - p.curLeft, dy = targetTop - p.curTop, dist = Math.hypot(dx, dy);
+        if (dist < tol && (!best || dist < best.dist)) best = { dx, dy, dist };
+      }
+    }
+    if (!best) return null;
+    const t = 1 - best.dist / tol;
+    const pull = Math.min(1, Math.pow(t, 1.6) * 1.15);
+    return { dx: best.dx * pull, dy: best.dy * pull, pull };
+  }
+
+  tryConnectAndSnap(groupId) {
+    const tol = this.snapTol;
+    const pieces = this.state.pieces;
+    const groupMembers = pieces.filter(p => p.groupId === groupId && !p.solved);
+    if (!groupMembers.length) return;
+    let match = null;
+    for (const p of groupMembers) {
+      const [r, c] = p.id.split('-').map(Number);
+      for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]) {
+        const q = pieces.find(pp => pp.id === `${nr}-${nc}`);
+        if (!q || q.solved || q.groupId === groupId) continue;
+        if (!this.isRotationOk(p.rotation, this.state.difficulty) || !this.isRotationOk(q.rotation, this.state.difficulty)) continue;
+        const cdx = q.homeLeft - p.homeLeft, cdy = q.homeTop - p.homeTop;
+        const adx = q.curLeft - p.curLeft, ady = q.curTop - p.curTop;
+        if (Math.abs(adx - cdx) < tol && Math.abs(ady - cdy) < tol) { match = { dx: cdx - adx, dy: cdy - ady, targetGroup: q.groupId }; break; }
+      }
+      if (match) break;
+    }
+
+    let newPieces = pieces, connected = false, checkGroup = groupId;
+    if (match) {
+      const movingIds = new Set(groupMembers.map(p => p.id));
+      const anchor = groupMembers[0];
+      const newAnchorLeft = Math.round(anchor.curLeft + match.dx), newAnchorTop = Math.round(anchor.curTop + match.dy);
+      newPieces = this.deriveClusterPositions(pieces, movingIds, anchor.homeLeft, anchor.homeTop, newAnchorLeft, newAnchorTop)
+        .map(p => movingIds.has(p.id) ? { ...p, rotation: 0, groupId: match.targetGroup } : p);
+      connected = true;
+      checkGroup = match.targetGroup;
+    }
+
+    const members2 = newPieces.filter(p => p.groupId === checkGroup && !p.solved);
+    let newlySolved = 0;
+    if (members2.length) {
+      const anchor = members2[0];
+      const posOk = Math.abs(anchor.curLeft - anchor.homeLeft) < tol && Math.abs(anchor.curTop - anchor.homeTop) < tol;
+      const rotOk = this.isRotationOk(anchor.rotation, this.state.difficulty);
+      if (posOk && rotOk) {
+        const ids = new Set(members2.map(m => m.id));
+        newPieces = newPieces.map(p => ids.has(p.id) ? { ...p, curLeft: p.homeLeft, curTop: p.homeTop, rotation: 0, solved: true } : p);
+        newlySolved = members2.length;
+      }
+    }
+
+    if (!connected && newlySolved === 0) return;
+    if (newlySolved > 0) this.playConnect(); else this.playConnect();
+    this.setState(s => ({ pieces: newPieces, solvedCount: s.solvedCount + newlySolved }), () => {
+      if (this.state.pieces.length && this.state.solvedCount === this.state.pieces.length) this.handleWin();
+    });
+    this.pulse(checkGroup, 320);
+  }
+
+  checkManualDoubleClick(id, e) {
+    const now = Date.now();
+    const isDouble = this._lastDownId === id && (now - this._lastDownTime) < 380;
+    this._lastDownId = isDouble ? null : id; this._lastDownTime = now;
+    if (isDouble) { e.stopPropagation(); this.onPieceDouble(id, e); return true; }
+    return false;
+  }
+  onPieceDown = (id, e) => {
+    if (this.state.introPhase) return;
+    if (this.checkManualDoubleClick(id, e)) return;
+    const p = this.state.pieces.find(pp => pp.id === id);
+    if (!p || p.solved) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const members = this.state.pieces.filter(pp => pp.groupId === p.groupId && !pp.solved);
+    this._drag = {
+      groupId: p.groupId, startX: e.clientX, startY: e.clientY,
+      anchorHomeLeft: p.homeLeft, anchorHomeTop: p.homeTop,
+      anchorStartLeft: p.curLeft, anchorStartTop: p.curTop,
+      memberIds: new Set(members.map(m => m.id))
+    };
+    this.setState({ selectedId: id, draggingGroupId: p.groupId });
+  };
+  deriveClusterPositions(pieces, memberIds, anchorHomeLeft, anchorHomeTop, anchorLeft, anchorTop) {
+    return pieces.map(p => memberIds.has(p.id)
+      ? { ...p, curLeft: anchorLeft + (p.homeLeft - anchorHomeLeft), curTop: anchorTop + (p.homeTop - anchorHomeTop) }
+      : p);
+  }
+  clampAnchor(anchorLeft, anchorTop, memberIds, anchorHomeLeft, anchorHomeTop) {
+    const stageW = 1120, stageH = 760;
+    let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity;
+    this.state.pieces.forEach(p => {
+      if (!memberIds.has(p.id)) return;
+      const left = anchorLeft + (p.homeLeft - anchorHomeLeft), top = anchorTop + (p.homeTop - anchorHomeTop);
+      minLeft = Math.min(minLeft, left); minTop = Math.min(minTop, top);
+      maxRight = Math.max(maxRight, left + p.boxW); maxBottom = Math.max(maxBottom, top + p.boxH);
+    });
+    let dxAdj = 0, dyAdj = 0;
+    if (minLeft < 0) dxAdj = -minLeft; else if (maxRight > stageW) dxAdj = stageW - maxRight;
+    if (minTop < 0) dyAdj = -minTop; else if (maxBottom > stageH) dyAdj = stageH - maxBottom;
+    return { left: anchorLeft + dxAdj, top: anchorTop + dyAdj };
+  }
+  onPieceMove = (id, e) => {
+    if (!this._drag) return;
+    const scale = this.state.stageScale || 1;
+    const dx = Math.round((e.clientX - this._drag.startX) / scale), dy = Math.round((e.clientY - this._drag.startY) / scale);
+    let { left: anchorLeft, top: anchorTop } = this.clampAnchor(this._drag.anchorStartLeft + dx, this._drag.anchorStartTop + dy, this._drag.memberIds, this._drag.anchorHomeLeft, this._drag.anchorHomeTop);
+    let moved = this.deriveClusterPositions(this.state.pieces, this._drag.memberIds, this._drag.anchorHomeLeft, this._drag.anchorHomeTop, anchorLeft, anchorTop);
+    const magnet = this.computeMagnetOffset(this._drag.groupId, moved);
+    let rotationPatch = null;
+    if (magnet) {
+      anchorLeft += Math.round(magnet.dx); anchorTop += Math.round(magnet.dy);
+      moved = this.deriveClusterPositions(this.state.pieces, this._drag.memberIds, this._drag.anchorHomeLeft, this._drag.anchorHomeTop, anchorLeft, anchorTop);
+      if (this._drag.memberIds.size === 1 && this.state.difficulty === 'hard') {
+        const p = moved.find(pp => this._drag.memberIds.has(pp.id));
+        const norm = ((p.rotation % 360) + 360) % 360;
+        const delta = norm > 180 ? norm - 360 : norm;
+        rotationPatch = p.rotation - delta * magnet.pull;
+      }
+    }
+    if (rotationPatch != null) moved = moved.map(p => this._drag.memberIds.has(p.id) ? { ...p, rotation: rotationPatch } : p);
+    this.setState({ pieces: moved });
+  };
+  onPieceUp = (id, e) => {
+    if (!this._drag) return;
+    const groupId = this._drag.groupId;
+    this._drag = null;
+    this.setState({ draggingGroupId: null });
+    this.tryConnectAndSnap(groupId);
+  };
+
+  rotateSelected90 = () => {
+    if (this.state.introPhase) return;
+    const id = this.state.selectedId; if (id == null) return;
+    const p = this.state.pieces.find(pp => pp.id === id); if (!p || p.solved) return;
+    this.updatePiece(id, { rotation: (p.rotation + 90) % 360 });
+    this.playTick();
+    this.pulse(p.groupId, 220);
+    setTimeout(() => this.tryConnectAndSnap(p.groupId), 40);
+  };
+
+  onRotateHandleDown = (e) => {
+    if (this.state.introPhase) return;
+    const id = this.state.selectedId; if (id == null) return;
+    const p = this.state.pieces.find(pp => pp.id === id); if (!p) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    this._rotateDrag = { id, cx: p.curLeft + p.boxW / 2, cy: p.curTop + p.boxH / 2 };
+  };
+  onRotateHandleMove = (e) => {
+    if (!this._rotateDrag || !this.stageEl) return;
+    const { id, cx, cy } = this._rotateDrag;
+    const rect = this.stageEl.getBoundingClientRect();
+    const scale = this.state.stageScale || 1;
+    const mx = (e.clientX - rect.left) / scale, my = (e.clientY - rect.top) / scale;
+    let ang = Math.atan2(my - cy, mx - cx) * 180 / Math.PI + 90;
+    ang = ((ang % 360) + 360) % 360;
+    this.updatePiece(id, { rotation: ang });
+  };
+  onRotateHandleUp = () => {
+    if (!this._rotateDrag) return;
+    const id = this._rotateDrag.id; this._rotateDrag = null;
+    const p = this.state.pieces.find(pp => pp.id === id);
+    this.tryConnectAndSnap(p ? p.groupId : id);
+  };
+
+  toggleGhost = () => this.setState(s => ({ showGhost: !s.showGhost }));
+  toggleTimerHidden = () => this.setState(s => ({ timerHidden: !s.timerHidden }));
+  deselect = (e) => {
+    if (this.state.introPhase === 'hold') { this.beginBreakApart(); return; }
+    if (e.target === e.currentTarget) this.setState({ selectedId: null });
+  };
+  setBgColor(hex) { this.setState({ bgColor: hex }); }
+  dismissWelcome = () => {
+    try { localStorage.setItem('jigsaw_welcomed_v1', '1'); } catch (e) {}
+    cancelAnimationFrame(this._heroRaf);
+    cancelAnimationFrame(this._rotDemoRaf);
+    cancelAnimationFrame(this._mtnDemoRaf);
+    window.removeEventListener('resize', this.measureHero);
+    this.setState({ showWelcome: false });
+  };
+
+  ROT_DEMO_TOTAL = 5200;
+  ROT_DEMO_WRONG_HOLD = 500;
+  ROT_DEMO_ROTATE_END = 2100;
+  getRotDemoShapes() {
+    if (!this._rotDemoShapes) this._rotDemoShapes = [this.heroPieceShape(170, 160), this.heroPieceShape(170, 160)];
+    return this._rotDemoShapes;
+  }
+  rotDemoSteppedAngle(t, startAngle, steps) {
+    startAngle = startAngle == null ? 270 : startAngle; steps = steps || 3;
+    const segT = Math.min(steps, t * steps), step = Math.min(steps - 1, Math.floor(segT)), localT = segT - step, turnPortion = 0.6;
+    let angleFrac, bounce = 0;
+    if (localT < turnPortion) angleFrac = this.heroEaseOutCubic(localT / turnPortion);
+    else { angleFrac = 1; const p = (localT - turnPortion) / (1 - turnPortion); bounce = Math.sin(p * Math.PI) * 0.1; }
+    return { rotation: startAngle - (step + angleFrac) * 90, scale: 1 + bounce };
+  }
+
+  MTN_HOLD_END = 1000;
+  MTN_STAGE_END = 2600;
+  MTN_MOD_ROTATE_END = 4000;
+  MTN_HARD_ROTATE_END = 4200;
+  MTN_RESOLVED_HOLD_END = 5600;
+  MTN_GATHER_END = 7200;
+  MTN_TOTAL = 7700;
+  getMtnDemoDefs() {
+    if (this._mtnDefs) return this._mtnDefs;
+    const rows = 5, cols = 5, boxW = 600, boxH = 450;
+    const cellW = boxW / cols, cellH = boxH / rows;
+    const pad = Math.min(cellW, cellH) * 0.4; // matches real game's margin — big enough to hold the full tab bulge, no clipped/gapped tabs
+    const pieceW = cellW + 2 * pad, pieceH = cellH + 2 * pad;
+    // one contiguous 2x2 block over the ridgeline-into-treeline area: left column -> Moderate, right column -> Hard.
+    // sharing this block means all 4 pieces come from real adjacent cells in the same hEdge/vEdge tables below,
+    // so once each resolves to 0deg they interlock into one solved quad, not four independently-correct pieces.
+    const baseRow = 1, baseCol = 1;
+    const ENLARGE = 1.9, stagedCenterX = boxW * 0.5, stagedCenterY = boxH * 0.5;
+    const focalMap = {};
+    const wrongAngleGrid = { '0-0': 270, '1-0': 180, '0-1': -150, '1-1': 200 };
+    [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([lr, lc]) => {
+      const r = baseRow + lr, c = baseCol + lc;
+      const centerOffsetX = (lc - 0.5) * cellW * ENLARGE, centerOffsetY = (lr - 0.5) * cellH * ENLARGE;
+      focalMap[`${r}-${c}`] = {
+        mode: lc === 0 ? 'mod' : 'hard',
+        wrongAngle: wrongAngleGrid[`${lr}-${lc}`],
+        staged: { left: stagedCenterX + centerOffsetX - pieceW / 2, top: stagedCenterY + centerOffsetY - pieceH / 2 }
+      };
+    });
+    // shared per-edge tab/pinch params, generated once per boundary and referenced by both neighbors — same
+    // approach as the real game's generateGeometry, so adjacent pieces actually interlock (no random mismatch)
+    const hEdge = []; for (let r = 0; r < rows - 1; r++) { hEdge.push([]); for (let c = 0; c < cols; c++) hEdge[r].push(this.randEdgeParams()); }
+    const vEdge = []; for (let r = 0; r < rows; r++) { vEdge.push([]); for (let c = 0; c < cols - 1; c++) vEdge[r].push(this.randEdgeParams()); }
+    const defs = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const key = `${r}-${c}`, focal = focalMap[key];
+        const home = { left: c * cellW - pad, top: r * cellH - pad };
+        const TL = { x: pad, y: pad }, TR = { x: pad + cellW, y: pad }, BR = { x: pad + cellW, y: pad + cellH }, BL = { x: pad, y: pad + cellH };
+        const topEdge = r > 0 ? hEdge[r - 1][c] : null, rightEdge = c < cols - 1 ? vEdge[r][c] : null;
+        const bottomEdge = r < rows - 1 ? hEdge[r][c] : null, leftEdge = c > 0 ? vEdge[r][c - 1] : null;
+        const topOutward = topEdge ? topEdge.dir === -1 : false, rightOutward = rightEdge ? rightEdge.dir === 1 : false;
+        const bottomOutward = bottomEdge ? bottomEdge.dir === 1 : false, leftOutward = leftEdge ? leftEdge.dir === -1 : false;
+        const d = this.buildEdge(TL, TR, r === 0, topOutward, topEdge || {}) + this.buildEdge(TR, BR, c === cols - 1, rightOutward, rightEdge || {}) + this.buildEdge(BR, BL, r === rows - 1, bottomOutward, bottomEdge || {}) + this.buildEdge(BL, TL, c === 0, leftOutward, leftEdge || {});
+        const clip = `M ${TL.x} ${TL.y} ${d} Z`;
+        if (focal) {
+          defs.push({ id: key, focal: true, mode: focal.mode, home, staged: focal.staged, wrongAngle: focal.wrongAngle, w: pieceW, h: pieceH, clip });
+        } else {
+          const cx = (c + 0.5) / cols - 0.5, cy = (r + 0.5) / rows - 0.5;
+          const mag = 1.5 + Math.random() * 0.5;
+          const scatter = { left: boxW / 2 + cx * boxW * mag - pieceW / 2, top: boxH / 2 + cy * boxH * mag - pieceH / 2, rot: (Math.random() - 0.5) * 260 };
+          const delay = (Math.abs(r - 2) + Math.abs(c - 2)) * 65;
+          defs.push({ id: key, focal: false, home, scatter, delay, w: pieceW, h: pieceH, clip });
+        }
+      }
+    }
+    this._mtnDefs = { rows, cols, boxW, boxH, pieces: defs };
+    return this._mtnDefs;
+  }
+  mtnDemoTick = (now) => {
+    if (!this.state.showWelcome) return;
+    // root cause: a sync throw anywhere in this body (e.g. from the two close-together playConnect calls)
+    // ran before setState+reschedule, silently killing the recursive rAF chain with no console output.
+    // setState+reschedule now run unconditionally via finally, so the loop can never die mid-cycle again.
+    try {
+      if (!this._mtnStart) this._mtnStart = now;
+      const elapsed = (now - this._mtnStart) % this.MTN_TOTAL;
+      const last = this._mtnLastElapsed;
+      if (last != null) {
+        }
+      this._mtnLastElapsed = elapsed;
+      this.setState({ mtnElapsed: elapsed });
+    } catch (e) {
+    } finally {
+      this._mtnDemoRaf = requestAnimationFrame(this.mtnDemoTick);
+    }
+  };
+  rotDemoTick = (now) => {
+    if (!this.state.showWelcome) return;
+    if (!this._rotDemoStart) this._rotDemoStart = now;
+    const elapsed = (now - this._rotDemoStart) % this.ROT_DEMO_TOTAL;
+    this._rotDemoLastElapsed = elapsed;
+    this.setState({ rotDemoElapsed: elapsed });
+    this._rotDemoRaf = requestAnimationFrame(this.rotDemoTick);
+  };
+
+  HERO_TOTAL = 8200;
+  heroPieceShape(w, h) {
+    const pad = 25, cellW = w - 2 * pad, cellH = h - 2 * pad;
+    const TL = { x: pad, y: pad }, TR = { x: pad + cellW, y: pad }, BR = { x: pad + cellW, y: pad + cellH }, BL = { x: pad, y: pad + cellH };
+    const e1 = this.randEdgeParams(), e2 = this.randEdgeParams(), e3 = this.randEdgeParams(), e4 = this.randEdgeParams();
+    const d = this.buildEdge(TL, TR, false, e1.dir === 1, e1) + this.buildEdge(TR, BR, false, e2.dir === 1, e2) + this.buildEdge(BR, BL, false, e3.dir === 1, e3) + this.buildEdge(BL, TL, false, e4.dir === 1, e4);
+    return `M ${TL.x} ${TL.y} ${d} Z`;
+  }
+  setHeroSectionRef = (el) => {
+    if (el && el !== this.heroSectionEl) { this.heroSectionEl = el; this.measureHero(); }
+    else if (!el) { this.heroSectionEl = null; }
+  };
+  measureHero = () => {
+    if (this._heroMeasureScheduled) return;
+    this._heroMeasureScheduled = true;
+    requestAnimationFrame(() => {
+      this._heroMeasureScheduled = false;
+      if (!this.heroSectionEl) return;
+      const w = this.heroSectionEl.clientWidth, h = this.heroSectionEl.clientHeight;
+      if (!w || !h) return;
+      if (Math.abs(w - this.state.heroW) > 1 || Math.abs(h - this.state.heroH) > 1) this.setState({ heroW: w, heroH: h });
+    });
+  };
+  HERO_PIECE_COUNT = 6;
+  getHeroShapes() {
+    if (!this._heroShapes) this._heroShapes = Array.from({ length: this.HERO_PIECE_COUNT }, () => this.heroPieceShape(150, 140));
+    return this._heroShapes;
+  }
+  getHeroPieceDefs(heroW, heroH) {
+    const w = 150, h = 140;
+    const shapes = this.getHeroShapes();
+    // slot centers as fractions of the actual rendered hero video box — same box the bg video covers.
+    // 3 over prominent jellyfish bells (top-left, top-right, bottom-right); 3 more framing the headline
+    // (above it, lower-left, lower-right) without overlapping the text or the Start Playing button.
+    const centers = [
+      { fx: 0.187, fy: 0.166 }, { fx: 0.5, fy: 0.085 }, { fx: 0.78, fy: 0.24 },
+      { fx: 0.12, fy: 0.86 }, { fx: 0.93, fy: 0.629 }, { fx: 0.88, fy: 0.86 }
+    ];
+    const slots = centers.map(c => ({ left: Math.round(c.fx * heroW - w / 2), top: Math.round(c.fy * heroH - h / 2) }));
+    // scatter well beyond the visible frame edge (not just past it) so the flight covers real distance
+    const scatters = [
+      { left: Math.round(-heroW * 0.42), top: Math.round(heroH * 0.9), rot: -55 },
+      { left: Math.round(heroW * 0.5 - w / 2), top: Math.round(-heroH * 0.45), rot: 95 },
+      { left: Math.round(heroW * 1.42), top: Math.round(heroH * 0.55), rot: 200 },
+      { left: Math.round(-heroW * 0.45), top: Math.round(heroH * 1.35), rot: -140 },
+      { left: Math.round(heroW * 1.42), top: Math.round(heroH * 1.35), rot: 130 },
+      { left: Math.round(heroW * 1.45), top: Math.round(heroH * 0.92), rot: 250 }
+    ];
+    const stagingOffsets = [{ dx: -70, dy: -55 }, { dx: 0, dy: -70 }, { dx: 60, dy: 85 }, { dx: -65, dy: 55 }, { dx: -60, dy: 60 }, { dx: 60, dy: 55 }];
+    const times = [
+      { start: 200, rotateEnd: 2400, landEnd: 3100 }, { start: 500, rotateEnd: 2700, landEnd: 3400 },
+      { start: 900, rotateEnd: 3300, landEnd: 4050 }, { start: 1100, rotateEnd: 3500, landEnd: 4250 },
+      { start: 2000, rotateEnd: 4500, landEnd: 5300 }, { start: 2250, rotateEnd: 4750, landEnd: 5550 }
+    ];
+    return slots.map((slot, i) => ({
+      slot, scatter: scatters[i],
+      staging: { left: slot.left + stagingOffsets[i].dx, top: slot.top + stagingOffsets[i].dy },
+      ...times[i], w, h, clip: shapes[i]
+    }));
+  }
+  heroEaseOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  heroEaseOutBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+  heroStepRotation(t) {
+    const nSteps = 4, segT = Math.min(nSteps, t * nSteps), step = Math.min(nSteps - 1, Math.floor(segT)), localT = segT - step, turnPortion = 0.6;
+    let angleFrac, bounce = 0;
+    if (localT < turnPortion) { angleFrac = this.heroEaseOutCubic(localT / turnPortion); }
+    else { angleFrac = 1; const p = (localT - turnPortion) / (1 - turnPortion); bounce = Math.sin(p * Math.PI) * 0.12; }
+    return { rotation: (step + angleFrac) * 90, scale: 1 + bounce };
+  }
+  HERO_CELEBRATE_AT = 5550;
+  heroTick = (now) => {
+    if (!this.state.showWelcome) return;
+    if (!this._heroStart) this._heroStart = now;
+    const elapsed = (now - this._heroStart) % this.HERO_TOTAL;
+    const patch = { heroElapsed: elapsed };
+    if (!this.state.heroCopyRevealed && elapsed >= 4200) patch.heroCopyRevealed = true;
+    this._heroLastElapsed = elapsed;
+    this.setState(patch);
+    this._heroRaf = requestAnimationFrame(this.heroTick);
+  };
+  lerp(a, b, t) { return a + (b - a) * t; }
+
+  onPieceDouble = (id, e) => {
+    if (this.state.introPhase) return;
+    e.stopPropagation();
+    const p = this.state.pieces.find(pp => pp.id === id);
+    if (!p) return;
+    const jitterX = (Math.random() < 0.5 ? -1 : 1) * (50 + Math.random() * 30);
+    const jitterY = (Math.random() < 0.5 ? -1 : 1) * (50 + Math.random() * 30);
+    if (p.solved) {
+      const wasFullySolved = this.state.pieces.length > 0 && this.state.solvedCount === this.state.pieces.length;
+      if (wasFullySolved) { this._wonHandled = false; clearTimeout(this._statsTO); }
+      this.setState(s => ({
+        pieces: s.pieces.map(pp => pp.id === id ? { ...pp, solved: false, groupId: id, curLeft: pp.curLeft + jitterX, curTop: pp.curTop + jitterY } : pp),
+        solvedCount: Math.max(0, s.solvedCount - 1), selectedId: id,
+        showStatsCard: wasFullySolved ? false : s.showStatsCard
+      }));
+      this.playTick();
+    } else if (this.groupSize(p.groupId) > 1) {
+      this.setState(s => ({
+        pieces: s.pieces.map(pp => pp.id === id ? { ...pp, groupId: id, curLeft: pp.curLeft + jitterX, curTop: pp.curTop + jitterY } : pp),
+        selectedId: id
+      }));
+      this.playTick();
+    }
+  };
+
+  triggerHint = () => {
+    const unsolved = this.state.pieces.filter(p => !p.solved);
+    if (!unsolved.length) return;
+    const target = this.state.selectedId ? unsolved.find(p => p.id === this.state.selectedId) : null;
+    const pick = target || unsolved[Math.floor(Math.random() * unsolved.length)];
+    this.setState({ hintPieceId: pick.id, selectedId: pick.id });
+    clearTimeout(this._hintTO);
+    this._hintTO = setTimeout(() => this.setState({ hintPieceId: null }), 1700);
+  };
+
+  formatTime(sec) { const m = Math.floor(sec / 60), s = sec % 60; return `${m}:${String(s).padStart(2, '0')}`; }
+
+  playTick() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!this._actx) this._actx = new Ctx();
+      const ctx = this._actx, now = ctx.currentTime;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(520, now); o.frequency.exponentialRampToValueAtTime(300, now + 0.06);
+      g.gain.setValueAtTime(0.16, now); g.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      o.connect(g).connect(ctx.destination); o.start(now); o.stop(now + 0.14);
+    } catch (e) {}
+    try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+  }
+
+  playConnect() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!this._actx) this._actx = new Ctx();
+      const ctx = this._actx, now = ctx.currentTime;
+      // tick: filtered noise burst — broadband impact, not a tone
+      const dur = 0.012;
+      const frameCount = Math.ceil(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, frameCount, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < frameCount; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource(); noise.buffer = buf;
+      const bandpass = ctx.createBiquadFilter(); bandpass.type = 'bandpass'; bandpass.frequency.value = 3500; bandpass.Q.value = 1.2;
+      const gNoise = ctx.createGain();
+      gNoise.gain.setValueAtTime(0.9, now); gNoise.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      noise.connect(bandpass).connect(gNoise).connect(ctx.destination); noise.start(now); noise.stop(now + dur);
+      noise.onended = () => { try { noise.disconnect(); bandpass.disconnect(); gNoise.disconnect(); } catch (e) {} };
+      // thump: low-freq weight underneath, short so it doesn't outlast the tick
+      const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.type = 'triangle'; o2.frequency.setValueAtTime(160, now); o2.frequency.exponentialRampToValueAtTime(70, now + 0.045);
+      g2.gain.setValueAtTime(0.001, now); g2.gain.linearRampToValueAtTime(0.28, now + 0.004); g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      o2.connect(g2).connect(ctx.destination); o2.start(now); o2.stop(now + 0.06);
+      o2.onended = () => { try { o2.disconnect(); g2.disconnect(); } catch (e) {} };
+    } catch (e) {}
+    try { navigator.vibrate && navigator.vibrate([0, 10, 28, 16]); } catch (e) {}
+  }
+
+  playSolve() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!this._actx) this._actx = new Ctx();
+      const ctx = this._actx, now = ctx.currentTime;
+      const o1 = ctx.createOscillator(), g1 = ctx.createGain();
+      o1.type = 'sine'; o1.frequency.setValueAtTime(660, now);
+      g1.gain.setValueAtTime(0.001, now); g1.gain.setValueAtTime(0.24, now + 0.005); g1.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      o1.connect(g1).connect(ctx.destination); o1.start(now); o1.stop(now + 0.11);
+      const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+      o2.type = 'sine'; o2.frequency.setValueAtTime(990, now + 0.08);
+      g2.gain.setValueAtTime(0.001, now + 0.08); g2.gain.setValueAtTime(0.24, now + 0.09); g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+      o2.connect(g2).connect(ctx.destination); o2.start(now + 0.08); o2.stop(now + 0.25);
+    } catch (e) {}
+    try { navigator.vibrate && navigator.vibrate([0, 25]); } catch (e) {}
+  }
+
+  playWinChime() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!this._actx) this._actx = new Ctx();
+      const ctx = this._actx, now = ctx.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      notes.forEach((freq, i) => {
+        const t = now + i * 0.09;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.18, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+        o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.95);
+        const o2 = ctx.createOscillator(), g2 = ctx.createGain();
+        o2.type = 'triangle'; o2.frequency.setValueAtTime(freq / 2, t);
+        g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(0.08, t + 0.03); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+        o2.connect(g2).connect(ctx.destination); o2.start(t); o2.stop(t + 0.85);
+      });
+    } catch (e) {}
+    try { navigator.vibrate && navigator.vibrate([0, 20, 40, 20, 40, 30]); } catch (e) {}
+  }
+
+  renderVals() {
+    const s = this.state;
+    const activeBg = 'rgba(63,174,125,.16)', activeColor = '#3fae7d', idleColor = '#6f6659';
+    const pieceCountOptions = [25, 48, 96].map(n => {
+      const active = s.rows * s.cols === n;
+      return { label: String(n), onClick: () => this.setPieceCount(n), bg: active ? activeBg : 'transparent', color: active ? activeColor : idleColor, weight: active ? 700 : 400 };
+    });
+    const difficultyOptions = [['easy', 'Easy'], ['moderate', 'Moderate'], ['hard', 'Hard']].map(([key, label]) => {
+      const active = s.difficulty === key;
+      return { label, onClick: () => this.setDifficulty(key), bg: active ? activeBg : 'transparent', color: active ? activeColor : idleColor, weight: active ? 700 : 400 };
+    });
+    const difficultyLabel = { easy: 'Easy · No rotation', moderate: 'Moderate · Snap 90°', hard: 'Hard · Free rotate' }[s.difficulty];
+    const helpText = { easy: 'Drag pieces into place — no rotation needed. Double-click a placed piece to pull it back apart.', moderate: 'Select a piece, then tap the rotate button to turn it 90° at a time. Double-click a placed piece to pull it back apart.', hard: 'Select a piece, then drag its handle to spin it freely into place. Double-click a placed piece to pull it back apart.' }[s.difficulty];
+
+    const BLEED = 1.014;
+    const pieces = s.pieces.map(p => {
+      if (s.introPhase === 'hold') {
+        return {
+          left: p.homeLeft, top: p.homeTop, clip: p.pathD, bgX: p.bgPosX, bgY: p.bgPosY, w: p.boxW, h: p.boxH,
+          transform: `rotate(0deg) scale(${BLEED})`, cursor: 'default', z: 1, shadow: 'none', filter: 'none', transition: 'none',
+          onDown: () => {}, onMove: () => {}, onUp: () => {}, onDouble: () => {}
+        };
+      }
+      if (s.introPhase === 'breaking') {
+        return {
+          left: p.curLeft, top: p.curTop, clip: p.pathD, bgX: p.bgPosX, bgY: p.bgPosY, w: p.boxW, h: p.boxH,
+          transform: `rotate(${p.rotation}deg) scale(${BLEED})`, cursor: 'default', z: 300,
+          shadow: 'none', filter: 'drop-shadow(0 9px 14px rgba(0,0,0,.5))', transition: 'none',
+          onDown: () => {}, onMove: () => {}, onUp: () => {}, onDouble: () => {}
+        };
+      }
+      const isDragging = s.draggingGroupId != null && p.groupId === s.draggingGroupId && !p.solved;
+      const isPulsing = !isDragging && s.pulseGroupId != null && p.groupId === s.pulseGroupId && !p.solved;
+      const isHinted = !isDragging && s.hintPieceId === p.id && !p.solved;
+      const isClustered = !isDragging && this.groupSize(p.groupId) > 1;
+      const scale = isDragging ? 1.09 : (isPulsing ? 1.07 : (isHinted ? 1.05 : 1));
+      const lift = isDragging ? -6 : 0;
+      let shadow = 'none';
+      if (isPulsing) shadow = '0 0 0 3px rgba(63,174,125,.85)';
+      else if (isHinted) shadow = '0 0 0 3px rgba(63,174,125,.95), 0 0 26px rgba(63,174,125,.75)';
+      let filter = 'none';
+      if (!p.solved) {
+        if (isDragging) filter = 'drop-shadow(0 18px 20px rgba(0,0,0,.55))';
+        else if (!isClustered) filter = 'drop-shadow(0 3px 4px rgba(0,0,0,.3))';
+      }
+      let transition = 'none';
+      if (isDragging) transition = 'left .07s ease-out, top .07s ease-out, transform .12s ease-out';
+      else if (p.solved || isPulsing || isHinted) transition = 'left .2s cubic-bezier(.22,1,.36,1), top .2s cubic-bezier(.22,1,.36,1), transform .22s cubic-bezier(.34,1.56,.64,1), filter .2s ease';
+      return {
+        left: p.curLeft, top: p.curTop + lift, clip: p.pathD, bgX: p.bgPosX, bgY: p.bgPosY, w: p.boxW, h: p.boxH,
+        transform: `rotate(${p.rotation}deg) scale(${scale * BLEED})`,
+        cursor: p.solved ? 'default' : (isDragging ? 'grabbing' : 'grab'),
+        z: p.solved ? 1 : (isDragging ? 999 : (isHinted ? 700 : (p.id === s.selectedId ? 600 : 200))),
+        shadow, filter, transition,
+        onDown: (e) => this.onPieceDown(p.id, e), onMove: (e) => this.onPieceMove(p.id, e), onUp: (e) => this.onPieceUp(p.id, e), onDouble: (e) => this.onPieceDouble(p.id, e)
+      };
+    });
+
+    let handle = null;
+    if (s.selectedId != null) {
+      const p = s.pieces.find(pp => pp.id === s.selectedId);
+      if (p && !p.solved && s.difficulty !== 'easy' && this.groupSize(p.groupId) === 1) {
+        const left = p.curLeft + p.boxW / 2 - 17, top = p.curTop - 34;
+        handle = s.difficulty === 'moderate'
+          ? { isButton: true, isDrag: false, left, top, onClick: this.rotateSelected90 }
+          : { isButton: false, isDrag: true, left, top, onDown: this.onRotateHandleDown, onMove: this.onRotateHandleMove, onUp: this.onRotateHandleUp };
+      }
+    }
+
+    let hintRect = null;
+    if (s.hintPieceId != null) {
+      const p = s.pieces.find(pp => pp.id === s.hintPieceId);
+      if (p) hintRect = { left: p.homeLeft, top: p.homeTop, w: p.boxW, h: p.boxH };
+    }
+
+    const hintAvailable = s.pieces.some(p => !p.solved);
+    const isVideoMode = s.mode === 'video', isImageMode = !isVideoMode;
+    const canvasCursor = s.draggingGroupId != null ? 'grabbing' : 'grab';
+    const TEXTURE_URL = 'uploads/textures/brushed-metal-grain.png';
+    const bgCssFor = (hex, tile) => `url('${TEXTURE_URL}') 0 0 / ${tile}px ${tile}px repeat, ${hex}`;
+    const BG_PRESETS = [
+      { hex: '#333333', outline: 'rgba(255,255,255,0.28)' },
+      { hex: '#5A7A94', outline: 'rgba(0,0,0,0.35)' },
+      { hex: '#8B4A2E', outline: 'rgba(255,255,255,0.3)' },
+      { hex: '#D8C9A8', outline: 'rgba(0,0,0,0.3)' }
+    ];
+    const bgOptions = BG_PRESETS.map(({ hex, outline }) => ({
+      hex, bgCss: bgCssFor(hex, 40), onClick: () => this.setBgColor(hex),
+      ring: s.bgColor === hex ? '0 0 0 2px #3fae7d' : '0 0 0 1px rgba(255,255,255,.15)'
+    }));
+    const activePreset = BG_PRESETS.find(b => b.hex === s.bgColor) || BG_PRESETS[0];
+
+    const contentTypeOptions = [['static', 'Classic'], ['video', 'Live']].map(([key, label]) => {
+      const active = s.contentType === key;
+      return { label, onClick: () => this.setContentType(key), bg: active ? activeBg : 'transparent', color: active ? activeColor : idleColor, weight: active ? 700 : 400 };
+    });
+    const isStaticContent = s.contentType !== 'video', isVideoContent = s.contentType === 'video';
+    const videoOptions = [['uploads/clouds_2.mp4', 'Clouds'], ['uploads/balloons.mp4', 'Balloons'], ['uploads/fire.mp4', 'Fire'], ['uploads/murmuration.mp4', 'Murmuration'], ['uploads/jellyfish.mp4', 'Jellyfish']].map(([src, label]) => {
+      const active = s.videoSrc === src;
+      return { label, onClick: () => this.selectVideo(src), bg: active ? activeBg : 'transparent', color: active ? activeColor : idleColor, weight: active ? 700 : 400 };
+    });
+    const CATS = [
+      ['Landscapes / Nature', ['mountain-valley', 'autumn-canopy']],
+      ['Animals / Wildlife', ['fox', 'snow-leopard']],
+      ['Architecture / Cityscapes', ['cityscape', 'courtyard']],
+      ['Space / Cosmic', ['nebula', 'solar-sys']],
+      ['Abstract / Pattern Art', ['abstract-swirl', 'mosaic']],
+      ['Florals / Botanical', ['botanicals', 'poppies']]
+    ];
+    const label = (key) => key.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+    const libraryItems = [];
+    CATS.forEach(([name, keys]) => keys.forEach(key => {
+      const full = `uploads/puzzle-library/full/puz_${key}.jpg`;
+      const selected = s.imageSrc === full;
+      libraryItems.push({ key, category: name, label: label(key), thumb: `uploads/puzzle-library/thumbs/puz_${key}.jpg`, full, onClick: () => this.selectImage(full), ring: selected ? '0 0 0 2px #3fae7d' : '0 0 0 1px rgba(255,255,255,.08)' });
+    }));
+    const currentImageKey = (s.imageSrc.match(/puz_([a-z-]+)\.jpg$/) || [])[1] || '';
+    const currentImageLabel = currentImageKey ? label(currentImageKey) : 'Library';
+
+    let resumeSummary = '';
+    if (s.pendingResume) {
+      const pr = s.pendingResume;
+      const diffLbl = { easy: 'Easy', moderate: 'Moderate', hard: 'Hard' }[pr.difficulty] || pr.difficulty;
+      resumeSummary = `${pr.rows * pr.cols} pieces · ${diffLbl} · ${this.formatTime(pr.elapsedSec)} elapsed`;
+    }
+
+    let bestTimesDisplay = [];
+    if (s.pieces.length && s.solvedCount === s.pieces.length) {
+      try { const all = JSON.parse(localStorage.getItem(this.BEST_TIMES_KEY) || '{}'); bestTimesDisplay = all[this.configKey(s)] || []; } catch (e) {}
+    }
+    const bestTimesRows = bestTimesDisplay.map((t, i) => {
+      const isThis = t === s.elapsedSec;
+      return { rank: i + 1, label: this.formatTime(t), bg: isThis ? 'rgba(0,82,255,.18)' : 'transparent', color: isThis ? '#5b8fff' : '#c9cfdb', weight: isThis ? 700 : 400 };
+    });
+    const hasBestTimes = bestTimesRows.length > 0;
+
+    return {
+      pieceCountOptions, difficultyOptions, difficultyLabel, helpText,
+      pieces, handle, hintRect, bgOptions, pageBg: bgCssFor(activePreset.hex, 260), boardOutline: activePreset.outline,
+      showGhost: s.showGhost, showGhostImage: s.showGhost && s.mode !== 'video', showGhostVideo: s.showGhost && s.mode === 'video',
+      ghostColor: s.showGhost ? activeColor : idleColor, ghostBorder: s.showGhost ? 'rgba(63,174,125,.4)' : 'rgba(255,255,255,.12)',
+      solvedCount: s.solvedCount, totalPieces: s.pieces.length,
+      timerVisible: !s.timerHidden, timeLabel: this.formatTime(s.elapsedSec),
+      isWon: s.pieces.length > 0 && s.solvedCount === s.pieces.length,
+      hintColor: hintAvailable ? '#3fae7d' : '#4a453e', hintBorder: hintAvailable ? 'rgba(63,174,125,.4)' : 'rgba(255,255,255,.08)', hintCursor: hintAvailable ? 'pointer' : 'default',
+      toggleGhost: this.toggleGhost, toggleTimerHidden: this.toggleTimerHidden, triggerHint: this.triggerHint, newGameClick: this.newGameClick,
+      setStageRef: this.setStageRef, setStageHostRef: this.setStageHostRef, deselect: this.deselect,
+      stageScale: s.stageScale, stageBoxW: 1120 * s.stageScale, stageBoxH: 760 * s.stageScale,
+      isVideoMode, isImageMode, canvasCursor, introPulse: s.introPulse,
+      setCanvasRef: this.setCanvasRef, setVideoRef: this.setVideoRef, setGhostVideoRef: this.setGhostVideoRef,
+      canvasPointerDown: this.canvasPointerDown, canvasPointerMove: this.canvasPointerMove, canvasPointerUp: this.canvasPointerUp, canvasDoubleClick: this.canvasDoubleClick,
+      contentTypeOptions, isStaticContent, isVideoContent, videoOptions,
+      libraryItems, libraryOpen: s.libraryOpen, toggleLibrary: this.toggleLibrary, stopClick: this.stopClick, currentImageLabel,
+      imageSrc: s.imageSrc, videoSrc: s.videoSrc,
+      showResumePrompt: s.showResumePrompt, resumeSummary, startFreshFromPrompt: this.startFreshFromPrompt, resumeGame: this.resumeGame,
+      showStatsCard: s.showStatsCard, bestTimesRows, hasBestTimes, setRevealVideoRef: this.setRevealVideoRef,
+      showWelcome: s.showWelcome, showApp: !s.showWelcome, dismissWelcome: this.dismissWelcome, devResetWelcome: this.devResetWelcome,
+      setHeroSectionRef: this.setHeroSectionRef, heroW: s.heroW, heroH: s.heroH,
+      heroShowGlow: (s.heroElapsed || 0) >= this.HERO_CELEBRATE_AT && (s.heroElapsed || 0) < this.HERO_CELEBRATE_AT + 1400,
+      heroShowCopy: s.heroCopyRevealed,
+      rotDemo: (() => {
+        const e = s.rotDemoElapsed || 0, shapes = this.getRotDemoShapes();
+        const wrongEnd = this.ROT_DEMO_WRONG_HOLD, rotateEnd = this.ROT_DEMO_ROTATE_END;
+        let modRot = 270, modScale = 1, hardRot = -145, hardScale = 1, snapped = false;
+        if (e < wrongEnd) { modRot = 270; hardRot = -145; }
+        else if (e < rotateEnd) {
+          const t = (e - wrongEnd) / (rotateEnd - wrongEnd);
+          const sr = this.rotDemoSteppedAngle(t); modRot = sr.rotation; modScale = sr.scale;
+          hardRot = this.lerp(-145, 0, this.heroEaseOutCubic(t));
+        } else {
+          modRot = 0; hardRot = 0; snapped = true;
+          const t = Math.min(1, (e - rotateEnd) / 260);
+          modScale = 1 + (1 - t) * 0.1; hardScale = 1 + (1 - t) * 0.1;
+        }
+        const glowOpacity = snapped ? Math.max(0, 1 - (e - rotateEnd) / 500) : 0;
+        return {
+          modRot, modScale, hardRot, hardScale, snapped,
+          glowOpacity, showCopy: snapped && (e - rotateEnd) > 150,
+          clipMod: shapes[0], clipHard: shapes[1]
+        };
+      })(),
+      mtnDemo: (() => {
+        const e = s.mtnElapsed || 0;
+        const { boxW, boxH, pieces } = this.getMtnDemoDefs();
+        const holdEnd = this.MTN_HOLD_END, stageEnd = this.MTN_STAGE_END, modEnd = this.MTN_MOD_ROTATE_END, hardEnd = this.MTN_HARD_ROTATE_END;
+        const resolvedHoldEnd = this.MTN_RESOLVED_HOLD_END, gatherEnd = this.MTN_GATHER_END, total = this.MTN_TOTAL;
+        const BLEED = 1.014;
+        const list = pieces.map(def => {
+          const bgX = -def.home.left, bgY = -def.home.top;
+          const z = def.focal ? 500 : 1;
+          if (e < holdEnd) return { left: def.home.left, top: def.home.top, rot: 0, scale: BLEED, w: def.w, h: def.h, clip: def.clip, shadow: 'none', glow: 0, bgX, bgY, z };
+          if (e >= gatherEnd) return { left: def.home.left, top: def.home.top, rot: 0, scale: BLEED, w: def.w, h: def.h, clip: def.clip, shadow: 'none', glow: 0, bgX, bgY, z };
+          if (!def.focal) {
+            if (e < stageEnd) {
+              const t = Math.min(1, Math.max(0, (e - holdEnd - def.delay) / (stageEnd - holdEnd - def.delay)));
+              const eased = this.heroEaseOutCubic(t);
+              const left = this.lerp(def.home.left, def.scatter.left, eased), top = this.lerp(def.home.top, def.scatter.top, eased);
+              const rot = this.lerp(0, def.scatter.rot, eased);
+              const scale = this.lerp(BLEED, 1, eased);
+              return { left, top, rot, scale, w: def.w, h: def.h, clip: def.clip, shadow: t > 0.02 ? '0 8px 18px rgba(0,0,0,.5)' : 'none', glow: 0, bgX, bgY, z };
+            }
+            if (e < resolvedHoldEnd) return { left: def.scatter.left, top: def.scatter.top, rot: def.scatter.rot, scale: 1, w: def.w, h: def.h, clip: def.clip, shadow: '0 8px 18px rgba(0,0,0,.5)', glow: 0, bgX, bgY, z };
+            // gather back home — reverse float, staggered, mirroring the scatter's ease/feel
+            const gt = Math.min(1, Math.max(0, (e - resolvedHoldEnd - def.delay) / (gatherEnd - resolvedHoldEnd - def.delay)));
+            const eased = this.heroEaseOutCubic(gt);
+            const left = this.lerp(def.scatter.left, def.home.left, eased), top = this.lerp(def.scatter.top, def.home.top, eased);
+            const rot = this.lerp(def.scatter.rot, 0, eased);
+            const scale = this.lerp(1, BLEED, eased);
+            return { left, top, rot, scale, w: def.w, h: def.h, clip: def.clip, shadow: gt < 0.98 ? '0 8px 18px rgba(0,0,0,.5)' : 'none', glow: 0, bgX, bgY, z };
+          }
+          // focal piece
+          const rotateEnd = def.mode === 'mod' ? modEnd : hardEnd;
+          if (e < stageEnd) {
+            const t = this.heroEaseOutCubic(Math.min(1, (e - holdEnd) / (stageEnd - holdEnd)));
+            const left = this.lerp(def.home.left, def.staged.left, t), top = this.lerp(def.home.top, def.staged.top, t);
+            const rot = this.lerp(0, def.wrongAngle, t), scale = this.lerp(BLEED, 1.9, t);
+            return { left, top, rot, scale, w: def.w, h: def.h, clip: def.clip, shadow: '0 12px 26px rgba(0,0,0,.55)', glow: 0, bgX, bgY, z };
+          }
+          if (e < rotateEnd) {
+            const t = (e - stageEnd) / (rotateEnd - stageEnd);
+            let rot, scale;
+            if (def.mode === 'mod') { const sr = this.rotDemoSteppedAngle(t, def.wrongAngle, Math.round(Math.abs(def.wrongAngle) / 90) || 3); rot = sr.rotation; scale = 1.9 + (sr.scale - 1) * 0.8; }
+            else { rot = this.lerp(def.wrongAngle, 0, this.heroEaseOutCubic(t)); scale = 1.9; }
+            return { left: def.staged.left, top: def.staged.top, rot, scale, w: def.w, h: def.h, clip: def.clip, shadow: '0 12px 26px rgba(0,0,0,.55)', glow: 0, bgX, bgY, z };
+          }
+          if (e < resolvedHoldEnd) {
+            const settleT = Math.min(1, (e - rotateEnd) / 260);
+            const scale = 1.9 + (1 - settleT) * 0.15;
+            const glow = Math.max(0, 1 - (e - rotateEnd) / 500);
+            return { left: def.staged.left, top: def.staged.top, rot: 0, scale, w: def.w, h: def.h, clip: def.clip, shadow: '0 14px 30px rgba(0,0,0,.6)', glow, bgX, bgY, z };
+          }
+          // gather back home — shrink from the enlarged staged position back to its true grid cell
+          const gt = this.heroEaseOutCubic(Math.min(1, Math.max(0, (e - resolvedHoldEnd) / (gatherEnd - resolvedHoldEnd))));
+          const left = this.lerp(def.staged.left, def.home.left, gt), top = this.lerp(def.staged.top, def.home.top, gt);
+          const scale = this.lerp(1.9, BLEED, gt);
+          return { left, top, rot: 0, scale, w: def.w, h: def.h, clip: def.clip, shadow: gt < 0.98 ? '0 12px 26px rgba(0,0,0,.55)' : 'none', glow: 0, bgX, bgY, z };
+        });
+        return { boxW, boxH, pieces: list, showCopy: e >= hardEnd + 150 && e < resolvedHoldEnd + 400 };
+      })(),
+      heroGlowLeft: s.heroW / 2, heroGlowTop: s.heroH / 2,
+      heroSlots: this.getHeroPieceDefs(s.heroW, s.heroH).map(def => ({ left: def.slot.left, top: def.slot.top, w: def.w, h: def.h, clip: def.clip, vLeft: -def.slot.left, vTop: -def.slot.top, visible: (s.heroElapsed || 0) < def.landEnd })),
+      heroPieces: this.getHeroPieceDefs(s.heroW, s.heroH).map(def => {
+        const e = s.heroElapsed || 0;
+        if (e < def.start) return { visible: false };
+        let left, top, rot, scale;
+        if (e < def.rotateEnd) {
+          const t = (e - def.start) / (def.rotateEnd - def.start);
+          const eased = this.heroEaseOutCubic(t);
+          left = this.lerp(def.scatter.left, def.staging.left, eased); top = this.lerp(def.scatter.top, def.staging.top, eased);
+          const sr = this.heroStepRotation(t); rot = sr.rotation; scale = sr.scale;
+        } else if (e < def.landEnd) {
+          const t = (e - def.rotateEnd) / (def.landEnd - def.rotateEnd);
+          const eased = this.heroEaseOutBack(t);
+          left = this.lerp(def.staging.left, def.slot.left, eased); top = this.lerp(def.staging.top, def.slot.top, eased);
+          rot = 0; scale = t > 0.8 ? 1 + (1 - (t - 0.8) / 0.2) * 0.08 : 1;
+        } else {
+          left = def.slot.left; top = def.slot.top; rot = 0; scale = 1;
+        }
+        // vLeft/vTop anchor to the piece's HOME (destination) position, not its current one —
+        // matches real gameplay pieces, so the revealed content is always the correct, seamless crop.
+        return { visible: true, left, top, rot, scale, w: def.w, h: def.h, clip: def.clip, vLeft: -def.slot.left, vTop: -def.slot.top };
+      })
+    };
+  }
+}
+
+</script>
+</body>
+</html>

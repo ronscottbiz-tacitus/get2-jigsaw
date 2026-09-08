@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="280" viewBox="0 0 420 280">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2b2f3a"/><stop offset="0.55" stop-color="#7b8494"/><stop offset="1" stop-color="#dfe4ec"/>
+</linearGradient>
+<radialGradient id="h" cx="0.3" cy="0.25" r="0.9">
+<stop offset="0" stop-color="#fff" stop-opacity="0.35"/><stop offset="0.5" stop-color="#fff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="420" height="280" fill="url(#g)"/>
+<rect x="-20" y="7" width="460" height="70" fill="#000" opacity="0.040"/><rect x="-20" y="60" width="460" height="70" fill="#000" opacity="0.060"/><rect x="-20" y="94" width="460" height="70" fill="#000" opacity="0.080"/><rect x="-20" y="132" width="460" height="70" fill="#000" opacity="0.100"/><rect x="-20" y="163" width="460" height="70" fill="#000" opacity="0.120"/><rect x="-20" y="204" width="460" height="70" fill="#000" opacity="0.140"/><rect x="-20" y="244" width="460" height="70" fill="#000" opacity="0.160"/>
+<rect width="420" height="280" fill="url(#h)"/>
+<text x="25.2" y="257.6" font-family="'Archivo Expanded','Arial Narrow',sans-serif" font-weight="800" font-size="25" fill="#fff" fill-opacity="0.9">Snow Leopard</text>
+</svg>
