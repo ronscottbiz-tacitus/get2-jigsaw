@@ -25,19 +25,21 @@
 import { buildEdge, randEdgeParams } from '../../game/geometry';
 
 // ---- loop timeline (ms) ------------------------------------------------
-// Scatter-out is deliberately slow (~2.4s) so 11 pieces crossing to the far
-// corner read as a considered move, not a blur; the fly-in has room for
-// per-step overshoot + hold. Loop total 8600ms.
+// The fly-in window is long AND its easing (easeInOutSine) is near-linear, so
+// the *perceived* travel time ≈ the window: a piece is visibly crossing the
+// frame for ~3.5s, not front-loading 90% of the distance into the first second
+// (which is what easeOutCubic over a 3s window did — it read as a ~1.5s arrival).
+// Loop total ~10.1s.
 export const HERO_HOLD1_END = 1100; // assembled hold
 export const HERO_SCATTER_END = 3500; // pieces have reached the far side (2.4s out)
 export const HERO_GATHER_START = 4200; // begin flying home (brief scattered beat)
-export const HERO_GATHER_END = 7200; // pieces are back in their holes, upright
-export const HERO_TOTAL = 8600; // + a resolved hold, then the loop wraps
+export const HERO_GATHER_END = 9800; // pieces are back in their holes, upright (5.6s in)
+export const HERO_TOTAL = 11300; // + a resolved hold, then the loop wraps
 export const HERO_COPY_AT = 400; // headline fades in and stays
 
 /** Wall-clock per 90° step on the fly-in — constant regardless of how many
  * quarter-turns a piece does, so every snap has the same tempo. */
-export const HERO_STEP_MS = 600;
+export const HERO_STEP_MS = 750;
 
 export const HERO_PIECE_COUNT = 11;
 
@@ -45,6 +47,9 @@ export const HERO_PIECE_COUNT = 11;
 export const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 export const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+/** Gentle S-curve — the closest-to-linear ease. Soft start/stop, even speed in
+ * between, so travel time reads as ≈ the duration (used for the long fly-in). */
+export const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
 export function easeOutBack(t: number) {
   const c1 = 1.70158;
   const c3 = c1 + 1;
@@ -204,7 +209,6 @@ export function getHeroPieceDefs(heroW: number, heroH: number): HeroPieceDef[] {
   const cx = heroW / 2;
   const cy = heroH / 2;
   const spread = Math.max(heroW, heroH);
-  const halfDiag = Math.hypot(heroW, heroH) / 2;
 
   return CENTERS.map((c, i) => {
     const slot = {
@@ -215,15 +219,22 @@ export function getHeroPieceDefs(heroW: number, heroH: number): HeroPieceDef[] {
     const scy = slot.top + h / 2;
     const r = mulberry32(0x9e3779b9 ^ (i * 2654435761));
 
-    // fly-in origin: from the frame centre, head AWAY from the slot (i.e. toward
-    // the opposite side) and keep going past the far corner — maximises travel.
+    // fly-in origin: from the frame centre, head AWAY from the slot (toward the
+    // opposite side). Land the scatter point JUST past the frame edge in that
+    // direction (+ the piece size + a little variance) — fully off-frame, but no
+    // further, so the fly-in is almost entirely *visible* on-screen travel
+    // rather than a long off-frame void crossing.
     let ux = cx - scx;
     let uy = cy - scy;
     const d2c = Math.hypot(ux, uy) || 1;
     ux /= d2c;
     uy /= d2c;
-    const outDist = halfDiag * (1.14 + r() * 0.34); // past the opposite corner
-    const jitter = (r() - 0.5) * spread * 0.28; // perpendicular variety
+    const edgeDist = Math.min(
+      Math.abs(ux) > 1e-4 ? cx / Math.abs(ux) : Infinity,
+      Math.abs(uy) > 1e-4 ? cy / Math.abs(uy) : Infinity,
+    );
+    const outDist = edgeDist + Math.max(w, h) + spread * (0.05 + r() * 0.12);
+    const jitter = (r() - 0.5) * spread * 0.24; // perpendicular variety
     const scatter = {
       left: Math.round(cx + ux * outDist + -uy * jitter - w / 2),
       top: Math.round(cy + uy * outDist + ux * jitter - h / 2),
@@ -307,15 +318,17 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
     };
   }
 
-  // D — fly home across the frame. Position eases straight in over the whole
-  // window; rotation runs on its OWN fixed-tempo clock (HERO_STEP_MS per
-  // quarter-turn, so a 1-step and a 4-step piece snap at the same speed) and
-  // finishes before the piece seats, leaving a short upright glide into the
-  // hole. Each step overshoots + holds + settles (HERO_SNAP).
+  // D — fly home across the frame. Position uses easeInOutSine over the whole
+  // (long) window so the piece is visibly travelling for most of it rather than
+  // snapping ~90% of the way home in the first second. Rotation runs on its OWN
+  // fixed-tempo clock (HERO_STEP_MS per quarter-turn, so a 1-step and a 4-step
+  // piece snap at the same speed) and finishes before the piece seats, leaving
+  // a short upright glide into the hole. Each step overshoots + holds + settles
+  // (HERO_SNAP).
   if (e < HERO_GATHER_END) {
     const local = e - HERO_GATHER_START - def.delay;
     const posDur = Math.max(1, HERO_GATHER_END - HERO_GATHER_START - def.delay);
-    const kPos = easeOutCubic(clamp01(local / posDur));
+    const kPos = easeInOutSine(clamp01(local / posDur));
     const tRot = clamp01(local / (def.steps * HERO_STEP_MS));
     const sr = steppedAngle(tRot, def.steps * 90, def.steps, HERO_SNAP);
     return {

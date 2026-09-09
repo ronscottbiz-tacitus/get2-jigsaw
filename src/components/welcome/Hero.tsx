@@ -28,6 +28,11 @@ import {
   heroPieceAt,
   heroSlotVisibleAt,
   HERO_COPY_AT,
+  HERO_HOLD1_END,
+  HERO_SCATTER_END,
+  HERO_GATHER_START,
+  HERO_GATHER_END,
+  HERO_STEP_MS,
   HERO_TOTAL,
   type HeroPieceDef,
 } from './heroAnim';
@@ -65,6 +70,24 @@ export class Hero extends Component<Props, State> {
     for (const e of GESTURES)
       window.addEventListener(e, this.tryPlay, { passive: true });
     document.addEventListener('visibilitychange', this.tryPlay);
+
+    // dev-only hook so tooling can inspect / drive the animation model for
+    // timing verification (tree-shaken from production builds).
+    if (import.meta.env.DEV) {
+      (window as unknown as { __heroDebug?: unknown }).__heroDebug = {
+        defs: () => getHeroPieceDefs(this.state.heroW, this.state.heroH),
+        pieceAt: heroPieceAt,
+        slotVisibleAt: heroSlotVisibleAt,
+        T: {
+          HERO_HOLD1_END,
+          HERO_SCATTER_END,
+          HERO_GATHER_START,
+          HERO_GATHER_END,
+          HERO_STEP_MS,
+          HERO_TOTAL,
+        },
+      };
+    }
   }
 
   componentWillUnmount() {

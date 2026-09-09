@@ -15,6 +15,7 @@ import {
   HERO_GATHER_START,
   HERO_GATHER_END,
   HERO_TOTAL,
+  HERO_STEP_MS,
 } from './heroAnim';
 
 const W = 1440;
@@ -118,7 +119,7 @@ describe('hero choreography', () => {
 
   it('every 90° step runs at the same wall-clock tempo regardless of step count', () => {
     // a 1-step and a 4-step piece should take the same time per quarter-turn
-    const perStepMs = 600; // HERO_STEP_MS
+    const perStepMs = HERO_STEP_MS;
     for (const d of defs) {
       // the turn of the first step completes within ~turnPortion*perStepMs
       const start = HERO_GATHER_START + d.delay;
@@ -143,6 +144,38 @@ describe('hero choreography', () => {
         if (samples[i] > samples[i - 1] + 2) regressions++;
       expect(regressions).toBe(0);
     }
+  });
+
+  it('fly-in travel is spread across the window, not front-loaded', () => {
+    // regression guard: easeOutCubic here made a piece cover ~85% of its
+    // journey in the first ~40% of the window (it "arrived" in ~1.5s of a 3s
+    // window). With an even ease the travelled fraction should track elapsed.
+    const win = HERO_GATHER_END - HERO_GATHER_START;
+    for (const d of defs) {
+      const start = HERO_GATHER_START + d.delay;
+      const total = Math.hypot(
+        d.scatter.left - d.slot.left,
+        d.scatter.top - d.slot.top,
+      );
+      const travelledAt = (frac: number) => {
+        const p = heroPieceAt(d, start + win * frac);
+        const dist = Math.hypot(p.left - d.slot.left, p.top - d.slot.top);
+        return 1 - dist / total;
+      };
+      // at 25% of the window: nowhere near home
+      expect(travelledAt(0.25)).toBeLessThan(0.35);
+      // at the midpoint: roughly half way (even pacing)
+      expect(travelledAt(0.5)).toBeGreaterThan(0.35);
+      expect(travelledAt(0.5)).toBeLessThan(0.65);
+      // still visibly moving at 75%
+      expect(travelledAt(0.75)).toBeLessThan(0.92);
+      // and it does finish
+      expect(travelledAt(0.98)).toBeGreaterThan(0.97);
+    }
+  });
+
+  it('fly-in window is long enough to track a full journey (≥ 3.5s)', () => {
+    expect(HERO_GATHER_END - HERO_GATHER_START).toBeGreaterThanOrEqual(3500);
   });
 
   it('always samples the video at the landing slot, in every phase', () => {
