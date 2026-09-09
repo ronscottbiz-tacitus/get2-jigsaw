@@ -79,29 +79,55 @@ describe('hero choreography', () => {
     }
   });
 
-  it('flies in with stepped 90° rotation + bounce, landing upright', () => {
+  it('flies in with pronounced stepped 90° snaps — overshoot, hold, big scale pop, landing upright', () => {
     for (const d of defs) {
       const startRot = d.spinDir * d.steps * 90;
-      // near the start of the fly-in it is at (or near) its spun angle…
-      const near = heroPieceAt(d, HERO_GATHER_START + d.delay + 20);
+      const near = heroPieceAt(d, HERO_GATHER_START + d.delay + 10);
       expect(Math.abs(near.rot - startRot)).toBeLessThan(90);
 
-      // …sweep the leg: rotation ends at 0, and the scale pulses > 1 (bounce)
-      let sawBounce = false;
+      let maxScale = 1;
+      let minSpun = Infinity; // spinDir*rot; goes negative when it overshoots upright
       let maxAbsRot = 0;
-      for (let e = HERO_GATHER_START; e < HERO_GATHER_END; e += 60) {
+      let holdFrames = 0; // consecutive samples near an overshoot peak
+      let run = 0;
+      for (let e = HERO_GATHER_START; e < HERO_GATHER_END; e += 30) {
         const p = heroPieceAt(d, e);
-        if (p.scale > 1.02) sawBounce = true;
+        maxScale = Math.max(maxScale, p.scale);
+        minSpun = Math.min(minSpun, d.spinDir * p.rot);
         maxAbsRot = Math.max(maxAbsRot, Math.abs(p.rot));
+        if (p.scale > 1.12) {
+          run++;
+          holdFrames = Math.max(holdFrames, run);
+        } else run = 0;
       }
+      // bigger scale pop than the plain curve (~1.1)
+      expect(maxScale).toBeGreaterThan(1.15);
+      // rotational overshoot: the piece rotates past upright before settling
+      expect(minSpun).toBeLessThan(-6);
+      // the peak is held for a few frames (≥ ~60ms at 30ms sampling), not a flick
+      expect(holdFrames).toBeGreaterThanOrEqual(2);
       expect(maxAbsRot).toBeGreaterThanOrEqual(Math.abs(startRot) - 1);
-      expect(sawBounce).toBe(true);
 
       const landed = heroPieceAt(d, HERO_GATHER_END);
       expect(Math.abs(landed.rot)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(landed.scale - 1)).toBeLessThanOrEqual(0.01);
       expect(Math.abs(landed.left - d.slot.left)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(landed.top - d.slot.top)).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('every 90° step runs at the same wall-clock tempo regardless of step count', () => {
+    // a 1-step and a 4-step piece should take the same time per quarter-turn
+    const perStepMs = 600; // HERO_STEP_MS
+    for (const d of defs) {
+      // the turn of the first step completes within ~turnPortion*perStepMs
+      const start = HERO_GATHER_START + d.delay;
+      const afterFirstTurn = heroPieceAt(d, start + perStepMs * 0.42 + 5);
+      const firstTarget = d.spinDir * (d.steps * 90 - 90);
+      expect(Math.abs(afterFirstTurn.rot - firstTarget)).toBeLessThan(30);
+      // all steps done by steps*perStepMs (+ a little) — upright well before it seats
+      const doneRot = heroPieceAt(d, start + d.steps * perStepMs + 40).rot;
+      expect(Math.abs(doneRot)).toBeLessThanOrEqual(0.5);
     }
   });
 

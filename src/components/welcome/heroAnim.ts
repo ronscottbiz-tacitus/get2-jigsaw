@@ -5,10 +5,14 @@
  * backdrop video that belongs there. The loop is:
  *
  *   assembled hold
- *   → scatter outward to the OPPOSITE side of the frame (staggered, easeOutCubic)
+ *   → scatter outward to the OPPOSITE side of the frame (staggered, easeInOutCubic
+ *     over ~2.4s so the outward motion is deliberate, not a blur)
  *   → scattered hold
- *   → fly back in across the whole frame, rotating home through 90° steps with a
- *     spring bounce (the same `steppedAngle` curve Moderate difficulty uses)
+ *   → fly back in across the whole frame, rotating home through 90° steps — each
+ *     step (fixed ~600ms) overshoots the target angle, holds at the peak, then
+ *     settles, with a ~1.18 scale pulse, so every quarter-turn reads as a beat
+ *     (`steppedAngle` with punchier options; the plain curve is still what the
+ *     Moderate rotation demo uses)
  *   → resolved hold
  *   → (loop)
  *
@@ -21,22 +25,26 @@
 import { buildEdge, randEdgeParams } from '../../game/geometry';
 
 // ---- loop timeline (ms) ------------------------------------------------
-// Tuned against a busyness sweep of the running hero (fraction of the frame
-// covered by pieces over the loop). 9400 → 7500: the assembled + scattered
-// holds and the scatter-out are tightened to cut the "empty frame" stretch,
-// while the fly-in keeps a full ~2.8s so the stepped 90° rotation reads clearly
-// even for 4-quarter-turn pieces (~700ms per step).
+// Scatter-out is deliberately slow (~2.4s) so 11 pieces crossing to the far
+// corner read as a considered move, not a blur; the fly-in has room for
+// per-step overshoot + hold. Loop total 8600ms.
 export const HERO_HOLD1_END = 1100; // assembled hold
-export const HERO_SCATTER_END = 2700; // pieces have reached the far side
-export const HERO_GATHER_START = 3300; // begin flying home (brief scattered beat)
-export const HERO_GATHER_END = 6100; // pieces are back in their holes, upright
-export const HERO_TOTAL = 7500; // + a resolved hold, then the loop wraps
+export const HERO_SCATTER_END = 3500; // pieces have reached the far side (2.4s out)
+export const HERO_GATHER_START = 4200; // begin flying home (brief scattered beat)
+export const HERO_GATHER_END = 7200; // pieces are back in their holes, upright
+export const HERO_TOTAL = 8600; // + a resolved hold, then the loop wraps
 export const HERO_COPY_AT = 400; // headline fades in and stays
+
+/** Wall-clock per 90° step on the fly-in — constant regardless of how many
+ * quarter-turns a piece does, so every snap has the same tempo. */
+export const HERO_STEP_MS = 600;
 
 export const HERO_PIECE_COUNT = 11;
 
 // ---- easing ----------------------------------------------------------
 export const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+export const easeInOutCubic = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 export function easeOutBack(t: number) {
   const c1 = 1.70158;
   const c3 = c1 + 1;
@@ -45,29 +53,75 @@ export function easeOutBack(t: number) {
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
+/** Bump 0→1→0 over p∈[0,1] with a flat hold at the peak: `attack` rises
+ * (raised-cosine), `hold` stays at 1, the rest decays with a soft shoulder.
+ * Used to shape the per-step overshoot so the eye can register each beat. */
+function snapBump(p: number, attack: number, hold: number): number {
+  if (p <= 0 || p >= 1) return 0;
+  if (p < attack) return 0.5 - 0.5 * Math.cos((Math.PI * p) / attack);
+  if (p < attack + hold) return 1;
+  const q = (p - attack - hold) / (1 - attack - hold);
+  return Math.pow(1 - q, 1.4);
+}
+
+export interface SteppedOpts {
+  /** fraction of each step spent turning (rest is the settle). */
+  turnPortion?: number;
+  /** rotational overshoot past the target, as a fraction of 90° (0 = none). */
+  overshoot?: number;
+  /** peak scale pulse above 1. */
+  scalePulse?: number;
+  /** fraction of the settle held at the overshoot peak (0 = plain sin bounce). */
+  hold?: number;
+}
+
 /**
- * Stepped 90° rotation with a spring bounce at the end of each quarter-turn —
- * the Moderate-difficulty rotation feel. `steps` quarter-turns from `startAngle`
- * down to `startAngle - steps*90` over t∈[0,1]; each step turns in its first 60%
- * then holds with a `sin` bounce. Returns the current angle and a scale that
- * pulses ~1.1 on each snap and settles to 1.
- * (Shared with the "Rotation changes everything." demo — imported there.)
+ * Stepped 90° rotation — the Moderate-difficulty rotation feel. `steps`
+ * quarter-turns from `startAngle` down to `startAngle - steps*90` over t∈[0,1].
+ * Each step turns in its first `turnPortion`, then settles.
+ *
+ * With defaults it's the plain curve (turn, then a small `sin` scale bounce) —
+ * that's what the "Rotation changes everything." demo uses. Pass options for a
+ * punchier snap: `overshoot` rotates past the target and springs back, `hold`
+ * lingers at that peak, `scalePulse` sets the size of the scale pop.
  */
-export function steppedAngle(t: number, startAngle = 270, steps = 3) {
+export function steppedAngle(
+  t: number,
+  startAngle = 270,
+  steps = 3,
+  opts: SteppedOpts = {},
+) {
+  const turnPortion = opts.turnPortion ?? 0.6;
+  const overshoot = opts.overshoot ?? 0;
+  const scalePulse = opts.scalePulse ?? 0.1;
+  const hold = opts.hold ?? 0;
+
   const segT = Math.min(steps, t * steps);
   const step = Math.min(steps - 1, Math.floor(segT));
   const localT = segT - step;
-  const turnPortion = 0.6;
-  let angleFrac: number;
-  let bounce = 0;
-  if (localT < turnPortion) angleFrac = easeOutCubic(localT / turnPortion);
-  else {
-    angleFrac = 1;
-    const p = (localT - turnPortion) / (1 - turnPortion);
-    bounce = Math.sin(p * Math.PI) * 0.1;
+
+  if (localT < turnPortion) {
+    const angleFrac = easeOutCubic(localT / turnPortion);
+    return { rotation: startAngle - (step + angleFrac) * 90, scale: 1 };
   }
-  return { rotation: startAngle - (step + angleFrac) * 90, scale: 1 + bounce };
+  const p = (localT - turnPortion) / (1 - turnPortion); // 0..1 across the settle
+  const shaped =
+    hold > 0 ? snapBump(p, 0.2, hold) : Math.sin(p * Math.PI);
+  const angleFrac = 1 + overshoot * shaped; // >1 → past the target, springs back
+  return {
+    rotation: startAngle - (step + angleFrac) * 90,
+    scale: 1 + scalePulse * shaped,
+  };
 }
+
+/** Punchy snap options for the hero fly-in: fast turn, 14° overshoot held
+ * briefly at the peak, and a ~1.18 scale pop. */
+export const HERO_SNAP: SteppedOpts = {
+  turnPortion: 0.42,
+  overshoot: 0.155,
+  scalePulse: 0.18,
+  hold: 0.28,
+};
 
 /** deterministic per-index PRNG so scatter targets never change between frames. */
 function mulberry32(seed: number) {
@@ -225,12 +279,14 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
   // A — assembled hold
   if (e < HERO_HOLD1_END) return atSlot;
 
-  // B — scatter outward to the far side (staggered, decelerating). Rotation
-  // tumbles smoothly up to the scattered orientation.
+  // B — scatter outward to the far side. easeInOutCubic (not easeOut) so the
+  // piece lifts gently out of its hole instead of snapping away — the long
+  // travel then reads as deliberate. Rotation tumbles smoothly to the spun
+  // orientation over the same curve.
   if (e < HERO_SCATTER_END) {
     const dur = Math.max(1, HERO_SCATTER_END - HERO_HOLD1_END - def.delay);
     const t = clamp01((e - HERO_HOLD1_END - def.delay) / dur);
-    const k = easeOutCubic(t);
+    const k = easeInOutCubic(t);
     return {
       ...base,
       left: lerp(def.slot.left, def.scatter.left, k),
@@ -251,14 +307,17 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
     };
   }
 
-  // D — fly home across the frame: position eases in (easeOutCubic), rotation
-  // steps down to 0 through `steps` quarter-turns with the Moderate spring
-  // bounce, so the piece snaps upright as it drops into its hole.
+  // D — fly home across the frame. Position eases straight in over the whole
+  // window; rotation runs on its OWN fixed-tempo clock (HERO_STEP_MS per
+  // quarter-turn, so a 1-step and a 4-step piece snap at the same speed) and
+  // finishes before the piece seats, leaving a short upright glide into the
+  // hole. Each step overshoots + holds + settles (HERO_SNAP).
   if (e < HERO_GATHER_END) {
-    const dur = Math.max(1, HERO_GATHER_END - HERO_GATHER_START - def.delay);
-    const t = clamp01((e - HERO_GATHER_START - def.delay) / dur);
-    const kPos = easeOutCubic(t);
-    const sr = steppedAngle(t, def.steps * 90, def.steps);
+    const local = e - HERO_GATHER_START - def.delay;
+    const posDur = Math.max(1, HERO_GATHER_END - HERO_GATHER_START - def.delay);
+    const kPos = easeOutCubic(clamp01(local / posDur));
+    const tRot = clamp01(local / (def.steps * HERO_STEP_MS));
+    const sr = steppedAngle(tRot, def.steps * 90, def.steps, HERO_SNAP);
     return {
       ...base,
       left: lerp(def.scatter.left, def.slot.left, kPos),
