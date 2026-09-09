@@ -1,18 +1,34 @@
 /**
- * Pure maths for the hero's shatter → rotate → land → gather loop.
- * Ported from the prototype's `heroPieceShape`, `getHeroPieceDefs`,
- * `heroEaseOutCubic/Back`, `heroStepRotation`. The component just samples
- * `heroPieceAt(def, elapsed)` every frame.
+ * Pure maths for the hero's continuous loop.
+ *
+ * Every piece starts **solved** in its own hole, showing the slice of the
+ * backdrop video that belongs there. The loop is:
+ *
+ *   solved hold  →  scatter outward (staggered, easeOutCubic)
+ *   →  scattered hold  →  gather back inward (staggered, easeOutBack settle)
+ *   →  resolved hold  →  (loop)
+ *
+ * Because a piece is at its slot, rotation 0, at BOTH the end of the resolved
+ * hold and the start of the next solved hold, the wrap is seamless — no jump.
+ * The outward and inward legs use the same easing quality (cubic), mirrored.
+ *
+ * The video crop each piece carries is always sampled at `slot` (its landing
+ * hole), never its current position, so a gathered piece blends perfectly into
+ * the backdrop.
  */
 import { buildEdge, randEdgeParams } from '../../game/geometry';
 
-export const HERO_TOTAL = 9600; // one full loop incl. gather-back (was 8200, +gather)
-export const HERO_GATHER_START = 6400;
-export const HERO_GATHER_END = 8600;
-export const HERO_PIECE_COUNT = 6;
-export const HERO_CELEBRATE_AT = 5550;
-export const HERO_COPY_AT = 4200;
+// ---- loop timeline (ms) ------------------------------------------------
+export const HERO_HOLD1_END = 1500; // initial "assembled" hold
+export const HERO_SCATTER_END = 3600; // pieces have reached their scatter point
+export const HERO_GATHER_START = 5400; // begin floating home
+export const HERO_GATHER_END = 7800; // pieces are back in their holes
+export const HERO_TOTAL = 9400; // + a resolved hold, then the loop wraps
+export const HERO_COPY_AT = 400; // headline fades in and stays
 
+export const HERO_PIECE_COUNT = 11;
+
+// ---- easing ----------------------------------------------------------
 export const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 export function easeOutBack(t: number) {
   const c1 = 1.70158;
@@ -20,24 +36,18 @@ export function easeOutBack(t: number) {
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 }
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
-/** 4-step 90° rotation with a small spring bounce at each step. */
-export function heroStepRotation(t: number) {
-  const nSteps = 4;
-  const segT = Math.min(nSteps, t * nSteps);
-  const step = Math.min(nSteps - 1, Math.floor(segT));
-  const localT = segT - step;
-  const turnPortion = 0.6;
-  let angleFrac: number;
-  let bounce = 0;
-  if (localT < turnPortion) {
-    angleFrac = easeOutCubic(localT / turnPortion);
-  } else {
-    angleFrac = 1;
-    const p = (localT - turnPortion) / (1 - turnPortion);
-    bounce = Math.sin(p * Math.PI) * 0.12;
-  }
-  return { rotation: (step + angleFrac) * 90, scale: 1 + bounce };
+/** deterministic per-index PRNG so scatter targets never change between frames. */
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export function heroPieceShape(w: number, h: number): string {
@@ -63,15 +73,19 @@ export function heroPieceShape(w: number, h: number): string {
 export interface HeroPieceDef {
   slot: { left: number; top: number };
   scatter: { left: number; top: number; rot: number };
-  staging: { left: number; top: number };
-  start: number;
-  rotateEnd: number;
-  landEnd: number;
+  /** stagger (ms) applied to both the scatter-out and the gather-in legs. */
+  delay: number;
   w: number;
   h: number;
   clip: string;
 }
 
+/**
+ * Slot centres as fractions of the rendered hero box. Six are carried over from
+ * the original port; five more (marked NEW) fill the gaps around the frame so
+ * the assembled state reads as a real jigsaw. All of them steer clear of the
+ * centre band where the headline + CTA sit (roughly fx 0.30–0.70, fy 0.34–0.66).
+ */
 const CENTERS = [
   { fx: 0.187, fy: 0.166 },
   { fx: 0.5, fy: 0.085 },
@@ -79,30 +93,17 @@ const CENTERS = [
   { fx: 0.12, fy: 0.86 },
   { fx: 0.93, fy: 0.629 },
   { fx: 0.88, fy: 0.86 },
-];
-const STAGING_OFFSETS = [
-  { dx: -70, dy: -55 },
-  { dx: 0, dy: -70 },
-  { dx: 60, dy: 85 },
-  { dx: -65, dy: 55 },
-  { dx: -60, dy: 60 },
-  { dx: 60, dy: 55 },
-];
-const TIMES = [
-  { start: 200, rotateEnd: 2400, landEnd: 3100 },
-  { start: 500, rotateEnd: 2700, landEnd: 3400 },
-  { start: 900, rotateEnd: 3300, landEnd: 4050 },
-  { start: 1100, rotateEnd: 3500, landEnd: 4250 },
-  { start: 2000, rotateEnd: 4500, landEnd: 5300 },
-  { start: 2250, rotateEnd: 4750, landEnd: 5550 },
+  { fx: 0.055, fy: 0.4 }, // NEW — far-left mid
+  { fx: 0.965, fy: 0.2 }, // NEW — far-right upper
+  { fx: 0.35, fy: 0.9 }, // NEW — lower, left of centre
+  { fx: 0.63, fy: 0.905 }, // NEW — lower, right of centre
+  { fx: 0.315, fy: 0.055 }, // NEW — top band, left of centre
 ];
 
 let _shapes: string[] | null = null;
 function shapes(): string[] {
   if (!_shapes)
-    _shapes = Array.from({ length: HERO_PIECE_COUNT }, () =>
-      heroPieceShape(150, 140),
-    );
+    _shapes = Array.from({ length: CENTERS.length }, () => heroPieceShape(150, 140));
   return _shapes;
 }
 
@@ -110,30 +111,38 @@ export function getHeroPieceDefs(heroW: number, heroH: number): HeroPieceDef[] {
   const w = 150;
   const h = 140;
   const shp = shapes();
-  const slots = CENTERS.map((c) => ({
-    left: Math.round(c.fx * heroW - w / 2),
-    top: Math.round(c.fy * heroH - h / 2),
-  }));
-  const scatters = [
-    { left: Math.round(-heroW * 0.42), top: Math.round(heroH * 0.9), rot: -55 },
-    { left: Math.round(heroW * 0.5 - w / 2), top: Math.round(-heroH * 0.45), rot: 95 },
-    { left: Math.round(heroW * 1.42), top: Math.round(heroH * 0.55), rot: 200 },
-    { left: Math.round(-heroW * 0.45), top: Math.round(heroH * 1.35), rot: -140 },
-    { left: Math.round(heroW * 1.42), top: Math.round(heroH * 1.35), rot: 130 },
-    { left: Math.round(heroW * 1.45), top: Math.round(heroH * 0.92), rot: 250 },
-  ];
-  return slots.map((slot, i) => ({
-    slot,
-    scatter: scatters[i],
-    staging: {
-      left: slot.left + STAGING_OFFSETS[i].dx,
-      top: slot.top + STAGING_OFFSETS[i].dy,
-    },
-    ...TIMES[i],
-    w,
-    h,
-    clip: shp[i],
-  }));
+  const cx = heroW / 2;
+  const cy = heroH / 2;
+  const spread = Math.max(heroW, heroH);
+
+  return CENTERS.map((c, i) => {
+    const slot = {
+      left: Math.round(c.fx * heroW - w / 2),
+      top: Math.round(c.fy * heroH - h / 2),
+    };
+    // fling outward, away from the frame centre, in this piece's own direction
+    const scx = slot.left + w / 2;
+    const scy = slot.top + h / 2;
+    let dx = scx - cx;
+    let dy = scy - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    const r = mulberry32(0x9e3779b9 ^ (i * 2654435761));
+    const dist = 1.05 + r() * 0.5; // 1.05–1.55 × spread
+    const perpX = -dy;
+    const perpY = dx;
+    const jitter = (r() - 0.5) * spread * 0.45;
+    const scatter = {
+      left: Math.round(cx + dx * spread * dist + perpX * jitter - w / 2),
+      top: Math.round(cy + dy * spread * dist + perpY * jitter - h / 2),
+      rot: Math.round((r() - 0.5) * 520),
+    };
+    // outer pieces lead, inner pieces trail — an "unzip from the edges" feel
+    const radiusNorm = clamp01(len / (spread * 0.62));
+    const delay = Math.round((1 - radiusNorm) * 360 + (r() * 140));
+    return { slot, scatter, delay, w, h, clip: shp[i] };
+  });
 }
 
 export interface HeroPieceState {
@@ -145,13 +154,10 @@ export interface HeroPieceState {
   w: number;
   h: number;
   clip: string;
-  /** crop anchor — always the piece's destination slot, so the revealed video
-   * slice is the correct seamless crop regardless of where the piece is. */
   /**
-   * The video region this piece reveals is always sampled at its *landing*
-   * slot — never its current position — so the sliver it carries matches
-   * exactly where it comes to rest (and blends seamlessly into the background
-   * video once it lands).
+   * The video region this piece reveals is always sampled at its landing slot —
+   * never its current position — so the sliver it carries matches exactly where
+   * it comes to rest (and blends seamlessly into the backdrop video there).
    */
   slotLeft: number;
   slotTop: number;
@@ -159,63 +165,74 @@ export interface HeroPieceState {
 
 export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
   const base = {
+    visible: true,
     w: def.w,
     h: def.h,
     clip: def.clip,
     slotLeft: def.slot.left,
     slotTop: def.slot.top,
   };
-  if (e < def.start)
-    return { ...base, visible: false, left: 0, top: 0, rot: 0, scale: 1 };
+  const atSlot: HeroPieceState = {
+    ...base,
+    left: def.slot.left,
+    top: def.slot.top,
+    rot: 0,
+    scale: 1,
+  };
 
-  // gather-back: after HERO_GATHER_START, float every piece from its slot back
-  // out to its scatter origin with mirrored easing, then the loop wraps.
-  if (e >= HERO_GATHER_START) {
-    const gt = easeOutCubic(
-      Math.min(1, Math.max(0, (e - HERO_GATHER_START) / (HERO_GATHER_END - HERO_GATHER_START))),
-    );
+  // A — assembled hold
+  if (e < HERO_HOLD1_END) return atSlot;
+
+  // B — scatter outward (staggered, decelerating)
+  if (e < HERO_SCATTER_END) {
+    const dur = Math.max(1, HERO_SCATTER_END - HERO_HOLD1_END - def.delay);
+    const t = clamp01((e - HERO_HOLD1_END - def.delay) / dur);
+    const k = easeOutCubic(t);
     return {
       ...base,
-      visible: gt < 0.999,
-      left: lerp(def.slot.left, def.scatter.left, gt),
-      top: lerp(def.slot.top, def.scatter.top, gt),
-      rot: lerp(0, def.scatter.rot, gt),
+      left: lerp(def.slot.left, def.scatter.left, k),
+      top: lerp(def.slot.top, def.scatter.top, k),
+      rot: lerp(0, def.scatter.rot, k),
       scale: 1,
     };
   }
 
-  let left: number;
-  let top: number;
-  let rot: number;
-  let scale: number;
-  if (e < def.rotateEnd) {
-    const t = (e - def.start) / (def.rotateEnd - def.start);
-    const eased = easeOutCubic(t);
-    left = lerp(def.scatter.left, def.staging.left, eased);
-    top = lerp(def.scatter.top, def.staging.top, eased);
-    const sr = heroStepRotation(t);
-    rot = sr.rotation;
-    scale = sr.scale;
-  } else if (e < def.landEnd) {
-    const t = (e - def.rotateEnd) / (def.landEnd - def.rotateEnd);
-    const eased = easeOutBack(t);
-    left = lerp(def.staging.left, def.slot.left, eased);
-    top = lerp(def.staging.top, def.slot.top, eased);
-    rot = 0;
-    scale = t > 0.8 ? 1 + (1 - (t - 0.8) / 0.2) * 0.08 : 1;
-  } else {
-    left = def.slot.left;
-    top = def.slot.top;
-    rot = 0;
-    scale = 1;
+  // C — scattered hold
+  if (e < HERO_GATHER_START) {
+    return {
+      ...base,
+      left: def.scatter.left,
+      top: def.scatter.top,
+      rot: def.scatter.rot,
+      scale: 1,
+    };
   }
-  return { ...base, visible: true, left, top, rot, scale };
+
+  // D — gather back inward (staggered, same cubic easing as the scatter leg,
+  // mirrored). A tiny scale pulse as it seats, but no positional overshoot —
+  // the travel is a full frame-width, so easeOutBack here would fling the piece
+  // well past its hole.
+  if (e < HERO_GATHER_END) {
+    const dur = Math.max(1, HERO_GATHER_END - HERO_GATHER_START - def.delay);
+    const t = clamp01((e - HERO_GATHER_START - def.delay) / dur);
+    const k = easeOutCubic(t);
+    const seat = t > 0.82 ? Math.sin(((t - 0.82) / 0.18) * Math.PI) * 0.03 : 0;
+    return {
+      ...base,
+      left: lerp(def.scatter.left, def.slot.left, k),
+      top: lerp(def.scatter.top, def.slot.top, k),
+      rot: lerp(def.scatter.rot, 0, k),
+      scale: 1 + seat,
+    };
+  }
+
+  // E — resolved hold, until the loop wraps back to A (same pose → no jump)
+  return atSlot;
 }
 
+/** The breathing hole outline shows while its piece is away from home. */
 export function heroSlotVisibleAt(def: HeroPieceDef, e: number): boolean {
-  if (e >= HERO_GATHER_START) {
-    // slot frame fades as its piece gathers away
-    return e < HERO_GATHER_START + 500;
-  }
-  return e < def.landEnd;
+  const gone = HERO_HOLD1_END + def.delay + 120;
+  const back = HERO_GATHER_END + 200;
+  return e > gone && e < back;
 }

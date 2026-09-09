@@ -1,18 +1,20 @@
 /**
- * Marketing hero — a faithful port of the prototype's hero section.
+ * Marketing hero.
  *
  * A real, playing `<video>` (jellyfish.mp4) is the full-bleed backdrop. Over it,
- * six puzzle pieces fly in from off frame, step-rotate to upright, land into six
- * slots, hold, then float back out with mirrored easing before the loop repeats
- * (a genuine gather-back, not a hard cut). Every piece shows a *live* sliver of
- * that same video — sampled from the current frame — cropped to exactly where
- * the piece lands, so a landed piece blends seamlessly into the backdrop.
+ * eleven puzzle pieces run one continuous loop: they start solved in their own
+ * holes → scatter outward (staggered) → hold → gather smoothly back home with
+ * mirrored easing → re-solved → loop. Because every piece is at its hole,
+ * rotation 0, at both ends of the loop, the wrap is seamless — no jump. See
+ * `heroAnim.ts` for the timeline.
  *
- * Rather than mount seven independent `<video>` elements (the prototype's
- * approach, which drifts out of sync as pieces mount/unmount), we decode the
- * clip once in the backdrop `<video>` and draw every piece from it onto a single
- * `<canvas>` each frame — the same technique the in-game Live mode uses. One
- * decoder, all pieces frame-locked to the backdrop.
+ * Every piece shows a *live* sliver of that same video, sampled from the current
+ * frame and cropped to exactly where the piece lands, so a gathered piece
+ * blends seamlessly into the backdrop. Rather than mount eleven `<video>`
+ * elements (which would drift out of sync), the clip is decoded once in the
+ * backdrop `<video>` and every piece is drawn from it onto a single `<canvas>`
+ * each frame — the technique the in-game Live mode uses. One decoder, all
+ * pieces frame-locked to the backdrop.
  *
  * Headline "Puzzles that move." + a Start Playing CTA sit above every piece at
  * all times.
@@ -163,9 +165,18 @@ export class Hero extends Component<Props, State> {
     }
 
     const defs = getHeroPieceDefs(heroW, heroH);
+    const M = 160; // generous margin for rotation/scale bbox growth
     for (const def of defs) {
       const p = heroPieceAt(def, elapsed);
       if (!p.visible) continue;
+      // skip pieces flung fully off the canvas (scattered / mid-flight)
+      if (
+        p.left + p.w < -M ||
+        p.top + p.h < -M ||
+        p.left > heroW + M ||
+        p.top > heroH + M
+      )
+        continue;
       const path = this.pathFor(p.clip);
       const xform = () => {
         ctx.translate(p.left + p.w / 2, p.top + p.h / 2);
