@@ -3,10 +3,11 @@
  *
  * A real, playing `<video>` (jellyfish.mp4) is the full-bleed backdrop. Over it,
  * eleven puzzle pieces run one continuous loop: they start solved in their own
- * holes → scatter outward (staggered) → hold → gather smoothly back home with
- * mirrored easing → re-solved → loop. Because every piece is at its hole,
- * rotation 0, at both ends of the loop, the wrap is seamless — no jump. See
- * `heroAnim.ts` for the timeline.
+ * holes → scatter out to the opposite side of the frame (staggered) → hold →
+ * fly all the way back across, rotating home through 90° steps with a spring
+ * bounce (Moderate's `steppedAngle` curve) → re-solved → loop. Because every
+ * piece is at its hole, rotation 0, scale 1 at both ends of the loop, the wrap
+ * is seamless — no jump. See `heroAnim.ts` for the timeline.
  *
  * Every piece shows a *live* sliver of that same video, sampled from the current
  * frame and cropped to exactly where the piece lands, so a gathered piece

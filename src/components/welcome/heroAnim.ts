@@ -4,26 +4,33 @@
  * Every piece starts **solved** in its own hole, showing the slice of the
  * backdrop video that belongs there. The loop is:
  *
- *   solved hold  →  scatter outward (staggered, easeOutCubic)
- *   →  scattered hold  →  gather back inward (staggered, easeOutBack settle)
- *   →  resolved hold  →  (loop)
+ *   assembled hold
+ *   → scatter outward to the OPPOSITE side of the frame (staggered, easeOutCubic)
+ *   → scattered hold
+ *   → fly back in across the whole frame, rotating home through 90° steps with a
+ *     spring bounce (the same `steppedAngle` curve Moderate difficulty uses)
+ *   → resolved hold
+ *   → (loop)
  *
- * Because a piece is at its slot, rotation 0, at BOTH the end of the resolved
- * hold and the start of the next solved hold, the wrap is seamless — no jump.
- * The outward and inward legs use the same easing quality (cubic), mirrored.
+ * A piece is at its slot, rotation 0, scale 1 at BOTH the end of the resolved
+ * hold and the start of the next assembled hold, so the wrap is seamless.
  *
  * The video crop each piece carries is always sampled at `slot` (its landing
- * hole), never its current position, so a gathered piece blends perfectly into
- * the backdrop.
+ * hole), never its current position, so a landed piece blends into the backdrop.
  */
 import { buildEdge, randEdgeParams } from '../../game/geometry';
 
 // ---- loop timeline (ms) ------------------------------------------------
-export const HERO_HOLD1_END = 1500; // initial "assembled" hold
-export const HERO_SCATTER_END = 3600; // pieces have reached their scatter point
-export const HERO_GATHER_START = 5400; // begin floating home
-export const HERO_GATHER_END = 7800; // pieces are back in their holes
-export const HERO_TOTAL = 9400; // + a resolved hold, then the loop wraps
+// Tuned against a busyness sweep of the running hero (fraction of the frame
+// covered by pieces over the loop). 9400 → 7500: the assembled + scattered
+// holds and the scatter-out are tightened to cut the "empty frame" stretch,
+// while the fly-in keeps a full ~2.8s so the stepped 90° rotation reads clearly
+// even for 4-quarter-turn pieces (~700ms per step).
+export const HERO_HOLD1_END = 1100; // assembled hold
+export const HERO_SCATTER_END = 2700; // pieces have reached the far side
+export const HERO_GATHER_START = 3300; // begin flying home (brief scattered beat)
+export const HERO_GATHER_END = 6100; // pieces are back in their holes, upright
+export const HERO_TOTAL = 7500; // + a resolved hold, then the loop wraps
 export const HERO_COPY_AT = 400; // headline fades in and stays
 
 export const HERO_PIECE_COUNT = 11;
@@ -37,6 +44,30 @@ export function easeOutBack(t: number) {
 }
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+
+/**
+ * Stepped 90° rotation with a spring bounce at the end of each quarter-turn —
+ * the Moderate-difficulty rotation feel. `steps` quarter-turns from `startAngle`
+ * down to `startAngle - steps*90` over t∈[0,1]; each step turns in its first 60%
+ * then holds with a `sin` bounce. Returns the current angle and a scale that
+ * pulses ~1.1 on each snap and settles to 1.
+ * (Shared with the "Rotation changes everything." demo — imported there.)
+ */
+export function steppedAngle(t: number, startAngle = 270, steps = 3) {
+  const segT = Math.min(steps, t * steps);
+  const step = Math.min(steps - 1, Math.floor(segT));
+  const localT = segT - step;
+  const turnPortion = 0.6;
+  let angleFrac: number;
+  let bounce = 0;
+  if (localT < turnPortion) angleFrac = easeOutCubic(localT / turnPortion);
+  else {
+    angleFrac = 1;
+    const p = (localT - turnPortion) / (1 - turnPortion);
+    bounce = Math.sin(p * Math.PI) * 0.1;
+  }
+  return { rotation: startAngle - (step + angleFrac) * 90, scale: 1 + bounce };
+}
 
 /** deterministic per-index PRNG so scatter targets never change between frames. */
 function mulberry32(seed: number) {
@@ -72,8 +103,13 @@ export function heroPieceShape(w: number, h: number): string {
 
 export interface HeroPieceDef {
   slot: { left: number; top: number };
-  scatter: { left: number; top: number; rot: number };
-  /** stagger (ms) applied to both the scatter-out and the gather-in legs. */
+  /** fly-in origin — the far side of the frame, opposite this piece's hole. */
+  scatter: { left: number; top: number };
+  /** quarter-turns (1–4) the piece rotates through on the way home. */
+  steps: number;
+  /** +1 / −1 — which way it spins. */
+  spinDir: number;
+  /** stagger (ms) applied to both the scatter-out and the fly-in legs. */
   delay: number;
   w: number;
   h: number;
@@ -114,34 +150,39 @@ export function getHeroPieceDefs(heroW: number, heroH: number): HeroPieceDef[] {
   const cx = heroW / 2;
   const cy = heroH / 2;
   const spread = Math.max(heroW, heroH);
+  const halfDiag = Math.hypot(heroW, heroH) / 2;
 
   return CENTERS.map((c, i) => {
     const slot = {
       left: Math.round(c.fx * heroW - w / 2),
       top: Math.round(c.fy * heroH - h / 2),
     };
-    // fling outward, away from the frame centre, in this piece's own direction
     const scx = slot.left + w / 2;
     const scy = slot.top + h / 2;
-    let dx = scx - cx;
-    let dy = scy - cy;
-    const len = Math.hypot(dx, dy) || 1;
-    dx /= len;
-    dy /= len;
     const r = mulberry32(0x9e3779b9 ^ (i * 2654435761));
-    const dist = 1.05 + r() * 0.5; // 1.05–1.55 × spread
-    const perpX = -dy;
-    const perpY = dx;
-    const jitter = (r() - 0.5) * spread * 0.45;
+
+    // fly-in origin: from the frame centre, head AWAY from the slot (i.e. toward
+    // the opposite side) and keep going past the far corner — maximises travel.
+    let ux = cx - scx;
+    let uy = cy - scy;
+    const d2c = Math.hypot(ux, uy) || 1;
+    ux /= d2c;
+    uy /= d2c;
+    const outDist = halfDiag * (1.14 + r() * 0.34); // past the opposite corner
+    const jitter = (r() - 0.5) * spread * 0.28; // perpendicular variety
     const scatter = {
-      left: Math.round(cx + dx * spread * dist + perpX * jitter - w / 2),
-      top: Math.round(cy + dy * spread * dist + perpY * jitter - h / 2),
-      rot: Math.round((r() - 0.5) * 520),
+      left: Math.round(cx + ux * outDist + -uy * jitter - w / 2),
+      top: Math.round(cy + uy * outDist + ux * jitter - h / 2),
     };
-    // outer pieces lead, inner pieces trail — an "unzip from the edges" feel
-    const radiusNorm = clamp01(len / (spread * 0.62));
-    const delay = Math.round((1 - radiusNorm) * 360 + (r() * 140));
-    return { slot, scatter, delay, w, h, clip: shp[i] };
+
+    const steps = 1 + Math.floor(r() * 4); // 1..4 quarter-turns
+    const spinDir = r() < 0.5 ? 1 : -1;
+
+    // outer holes lead, inner holes trail — an "unzip from the edges" feel.
+    const radiusNorm = clamp01(d2c / (spread * 0.62));
+    const delay = Math.round((1 - radiusNorm) * 220 + r() * 120); // ≤ ~340ms
+
+    return { slot, scatter, steps, spinDir, delay, w, h, clip: shp[i] };
   });
 }
 
@@ -179,11 +220,13 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
     rot: 0,
     scale: 1,
   };
+  const spunAngle = def.spinDir * def.steps * 90; // orientation while scattered
 
   // A — assembled hold
   if (e < HERO_HOLD1_END) return atSlot;
 
-  // B — scatter outward (staggered, decelerating)
+  // B — scatter outward to the far side (staggered, decelerating). Rotation
+  // tumbles smoothly up to the scattered orientation.
   if (e < HERO_SCATTER_END) {
     const dur = Math.max(1, HERO_SCATTER_END - HERO_HOLD1_END - def.delay);
     const t = clamp01((e - HERO_HOLD1_END - def.delay) / dur);
@@ -192,7 +235,7 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
       ...base,
       left: lerp(def.slot.left, def.scatter.left, k),
       top: lerp(def.slot.top, def.scatter.top, k),
-      rot: lerp(0, def.scatter.rot, k),
+      rot: lerp(0, spunAngle, k),
       scale: 1,
     };
   }
@@ -203,26 +246,25 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
       ...base,
       left: def.scatter.left,
       top: def.scatter.top,
-      rot: def.scatter.rot,
+      rot: spunAngle,
       scale: 1,
     };
   }
 
-  // D — gather back inward (staggered, same cubic easing as the scatter leg,
-  // mirrored). A tiny scale pulse as it seats, but no positional overshoot —
-  // the travel is a full frame-width, so easeOutBack here would fling the piece
-  // well past its hole.
+  // D — fly home across the frame: position eases in (easeOutCubic), rotation
+  // steps down to 0 through `steps` quarter-turns with the Moderate spring
+  // bounce, so the piece snaps upright as it drops into its hole.
   if (e < HERO_GATHER_END) {
     const dur = Math.max(1, HERO_GATHER_END - HERO_GATHER_START - def.delay);
     const t = clamp01((e - HERO_GATHER_START - def.delay) / dur);
-    const k = easeOutCubic(t);
-    const seat = t > 0.82 ? Math.sin(((t - 0.82) / 0.18) * Math.PI) * 0.03 : 0;
+    const kPos = easeOutCubic(t);
+    const sr = steppedAngle(t, def.steps * 90, def.steps);
     return {
       ...base,
-      left: lerp(def.scatter.left, def.slot.left, k),
-      top: lerp(def.scatter.top, def.slot.top, k),
-      rot: lerp(def.scatter.rot, 0, k),
-      scale: 1 + seat,
+      left: lerp(def.scatter.left, def.slot.left, kPos),
+      top: lerp(def.scatter.top, def.slot.top, kPos),
+      rot: def.spinDir * sr.rotation,
+      scale: sr.scale,
     };
   }
 
@@ -230,9 +272,10 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
   return atSlot;
 }
 
-/** The breathing hole outline shows while its piece is away from home. */
+/** The breathing hole outline shows while its piece is away from home — it
+ * fades out just before the piece seats so the two never fight. */
 export function heroSlotVisibleAt(def: HeroPieceDef, e: number): boolean {
-  const gone = HERO_HOLD1_END + def.delay + 120;
-  const back = HERO_GATHER_END + 200;
+  const gone = HERO_HOLD1_END + def.delay + 100;
+  const back = HERO_GATHER_END - 350;
   return e > gone && e < back;
 }

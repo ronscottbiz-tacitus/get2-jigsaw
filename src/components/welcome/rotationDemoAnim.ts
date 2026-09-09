@@ -11,7 +11,9 @@
  */
 import { buildEdge, randEdgeParams } from '../../game/geometry';
 import { BLEED } from '../../game/constants';
-import { easeOutCubic, lerp } from './heroAnim';
+// `steppedAngle` (the Moderate stepped-90°-with-bounce curve) lives in heroAnim
+// so the hero fly-in and this demo share exactly one implementation.
+import { easeOutCubic, lerp, steppedAngle } from './heroAnim';
 
 export const MTN_HOLD_END = 1000;
 export const MTN_STAGE_END = 2600;
@@ -20,23 +22,6 @@ export const MTN_HARD_ROTATE_END = 4200;
 export const MTN_RESOLVED_HOLD_END = 5600;
 export const MTN_GATHER_END = 7200;
 export const MTN_TOTAL = 7700;
-
-/** Stepped 90° rotation with a spring bounce at the end of each step. */
-export function steppedAngle(t: number, startAngle = 270, steps = 3) {
-  const segT = Math.min(steps, t * steps);
-  const step = Math.min(steps - 1, Math.floor(segT));
-  const localT = segT - step;
-  const turnPortion = 0.6;
-  let angleFrac: number;
-  let bounce = 0;
-  if (localT < turnPortion) angleFrac = easeOutCubic(localT / turnPortion);
-  else {
-    angleFrac = 1;
-    const p = (localT - turnPortion) / (1 - turnPortion);
-    bounce = Math.sin(p * Math.PI) * 0.1;
-  }
-  return { rotation: startAngle - (step + angleFrac) * 90, scale: 1 + bounce };
-}
 
 interface FocalDef {
   id: string;
