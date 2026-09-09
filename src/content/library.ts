@@ -116,6 +116,11 @@ export const VIDEOS: VideoItem[] = [
 export const fullSrcForKey = (key: string) => imgFull(key);
 export const posterSrcForKey = (key: string) => poster(key);
 
+/** The clip the marketing hero uses as its live backdrop. */
+export const HERO_VIDEO_SRC =
+  VIDEOS.find((v) => v.key === 'jellyfish')?.src ?? '/uploads/jellyfish.mp4';
+export const HERO_POSTER_SRC = poster('jellyfish');
+
 export const DEFAULT_IMAGE_SRC = IMAGES[0].full; // Mountain Valley
 export const DEFAULT_VIDEO_SRC = VIDEOS[1].src; // Balloons — matches the prototype default
 

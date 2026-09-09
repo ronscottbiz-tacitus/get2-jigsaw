@@ -147,8 +147,14 @@ export interface HeroPieceState {
   clip: string;
   /** crop anchor — always the piece's destination slot, so the revealed video
    * slice is the correct seamless crop regardless of where the piece is. */
-  vLeft: number;
-  vTop: number;
+  /**
+   * The video region this piece reveals is always sampled at its *landing*
+   * slot — never its current position — so the sliver it carries matches
+   * exactly where it comes to rest (and blends seamlessly into the background
+   * video once it lands).
+   */
+  slotLeft: number;
+  slotTop: number;
 }
 
 export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
@@ -156,8 +162,8 @@ export function heroPieceAt(def: HeroPieceDef, e: number): HeroPieceState {
     w: def.w,
     h: def.h,
     clip: def.clip,
-    vLeft: -def.slot.left,
-    vTop: -def.slot.top,
+    slotLeft: def.slot.left,
+    slotTop: def.slot.top,
   };
   if (e < def.start)
     return { ...base, visible: false, left: 0, top: 0, rot: 0, scale: 1 };

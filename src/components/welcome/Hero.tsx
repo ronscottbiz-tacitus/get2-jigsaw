@@ -1,17 +1,24 @@
 /**
- * Marketing hero. A looping choreography: six puzzle pieces fly in from off
- * frame, step-rotate to upright, land into six slots over the (jellyfish)
- * backdrop, hold on the resolved arrangement, then float back out with
- * mirrored easing before the loop repeats — a real gather-back, never a hard
- * cut. Headline "Puzzles that move." + a Start Playing CTA sit above every
- * piece at all times.
+ * Marketing hero — a faithful port of the prototype's hero section.
  *
- * Ported from the prototype's hero section + `heroTick`. Uses a still poster in
- * place of the jellyfish video until a real clip is dropped in (see
- * `posterSrcForKey('jellyfish')`); switching to <video> is a one-line change.
+ * A real, playing `<video>` (jellyfish.mp4) is the full-bleed backdrop. Over it,
+ * six puzzle pieces fly in from off frame, step-rotate to upright, land into six
+ * slots, hold, then float back out with mirrored easing before the loop repeats
+ * (a genuine gather-back, not a hard cut). Every piece shows a *live* sliver of
+ * that same video — sampled from the current frame — cropped to exactly where
+ * the piece lands, so a landed piece blends seamlessly into the backdrop.
+ *
+ * Rather than mount seven independent `<video>` elements (the prototype's
+ * approach, which drifts out of sync as pieces mount/unmount), we decode the
+ * clip once in the backdrop `<video>` and draw every piece from it onto a single
+ * `<canvas>` each frame — the same technique the in-game Live mode uses. One
+ * decoder, all pieces frame-locked to the backdrop.
+ *
+ * Headline "Puzzles that move." + a Start Playing CTA sit above every piece at
+ * all times.
  */
 import { Component } from 'react';
-import { posterSrcForKey } from '../../content/library';
+import { HERO_POSTER_SRC, HERO_VIDEO_SRC } from '../../content/library';
 import { ACCENT } from '../../game/constants';
 import {
   getHeroPieceDefs,
@@ -21,8 +28,6 @@ import {
   HERO_TOTAL,
   type HeroPieceDef,
 } from './heroAnim';
-
-const BACKDROP = posterSrcForKey('jellyfish');
 
 interface Props {
   onStart: () => void;
@@ -34,22 +39,42 @@ interface State {
   copyRevealed: boolean;
 }
 
+const GESTURES = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
+
 export class Hero extends Component<Props, State> {
   private raf?: number;
   private start?: number;
   private sectionEl: HTMLElement | null = null;
+  private bgVideoEl: HTMLVideoElement | null = null;
+  private canvasEl: HTMLCanvasElement | null = null;
   private measureScheduled = false;
   private resizeObs?: ResizeObserver;
+  private pathCache = new Map<string, Path2D>();
 
   state: State = { heroW: 1440, heroH: 810, elapsed: 0, copyRevealed: false };
 
   componentDidMount() {
     this.raf = requestAnimationFrame(this.tick);
+    // muted autoplay is normally allowed, but nudge it — and retry on the first
+    // real interaction if the browser withheld it.
+    this.tryPlay();
+    window.setTimeout(this.tryPlay, 300);
+    for (const e of GESTURES)
+      window.addEventListener(e, this.tryPlay, { passive: true });
+    document.addEventListener('visibilitychange', this.tryPlay);
   }
+
   componentWillUnmount() {
     cancelAnimationFrame(this.raf ?? 0);
     this.resizeObs?.disconnect();
+    for (const e of GESTURES) window.removeEventListener(e, this.tryPlay);
+    document.removeEventListener('visibilitychange', this.tryPlay);
   }
+
+  private tryPlay = () => {
+    const v = this.bgVideoEl;
+    if (v && v.paused && !document.hidden) v.play().catch(() => {});
+  };
 
   private setSectionRef = (el: HTMLElement | null) => {
     if (el && el !== this.sectionEl) {
@@ -61,6 +86,21 @@ export class Hero extends Component<Props, State> {
     } else if (!el) {
       this.sectionEl = null;
     }
+  };
+
+  private setBgVideoRef = (el: HTMLVideoElement | null) => {
+    this.bgVideoEl = el;
+    if (el) {
+      el.muted = true;
+      el.loop = true;
+      el.playsInline = true;
+      if (!el.src) el.src = HERO_VIDEO_SRC;
+      el.play().catch(() => {});
+    }
+  };
+
+  private setCanvasRef = (el: HTMLCanvasElement | null) => {
+    this.canvasEl = el;
   };
 
   private measure = () => {
@@ -87,13 +127,89 @@ export class Hero extends Component<Props, State> {
     if (!this.state.copyRevealed && elapsed >= HERO_COPY_AT)
       patch.copyRevealed = true;
     this.setState(patch as State);
+    this.drawPieces(elapsed);
     this.raf = requestAnimationFrame(this.tick);
   };
+
+  private pathFor(d: string): Path2D {
+    let p = this.pathCache.get(d);
+    if (!p) {
+      p = new Path2D(d);
+      this.pathCache.set(d, p);
+    }
+    return p;
+  }
+
+  /** Draw every visible piece as a clipped, transformed slice of the backdrop
+   * video's current frame. Cover-fit matches the backdrop `<video>`'s
+   * `object-fit: cover`, so a landed piece is pixel-aligned with the backdrop. */
+  private drawPieces(elapsed: number) {
+    const canvas = this.canvasEl;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const { heroW, heroH } = this.state;
+    ctx.clearRect(0, 0, heroW, heroH);
+
+    const v = this.bgVideoEl;
+    const ready = !!v && v.readyState >= 2 && v.videoWidth > 0;
+    let coverScale = 1;
+    let offX = 0;
+    let offY = 0;
+    if (ready && v) {
+      coverScale = Math.max(heroW / v.videoWidth, heroH / v.videoHeight);
+      offX = (v.videoWidth * coverScale - heroW) / 2;
+      offY = (v.videoHeight * coverScale - heroH) / 2;
+    }
+
+    const defs = getHeroPieceDefs(heroW, heroH);
+    for (const def of defs) {
+      const p = heroPieceAt(def, elapsed);
+      if (!p.visible) continue;
+      const path = this.pathFor(p.clip);
+      const xform = () => {
+        ctx.translate(p.left + p.w / 2, p.top + p.h / 2);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.scale(p.scale, p.scale);
+        ctx.translate(-p.w / 2, -p.h / 2);
+      };
+
+      // pass 1 — cast the soft photo-cutout drop shadow. `clip()` would also
+      // clip the shadow away, so fill the shape (hidden under pass 2) with the
+      // filter on and no clip.
+      ctx.save();
+      xform();
+      ctx.filter = 'drop-shadow(0 8px 16px rgba(0,0,0,0.6))';
+      ctx.fillStyle = '#000';
+      ctx.fill(path);
+      ctx.restore();
+
+      // pass 2 — the live video slice, clipped to the piece shape
+      ctx.save();
+      xform();
+      ctx.clip(path);
+      if (ready && v) {
+        // source rect in video pixels for the display-space window at the slot
+        const sx = (offX + p.slotLeft) / coverScale;
+        const sy = (offY + p.slotTop) / coverScale;
+        const sw = p.w / coverScale;
+        const sh = p.h / coverScale;
+        try {
+          ctx.drawImage(v, sx, sy, sw, sh, 0, 0, p.w, p.h);
+        } catch {
+          /* frame not decodable yet */
+        }
+      } else {
+        ctx.fillStyle = '#0a1a30';
+        ctx.fillRect(0, 0, p.w, p.h);
+      }
+      ctx.restore();
+    }
+  }
 
   render() {
     const { heroW, heroH, elapsed } = this.state;
     const defs = getHeroPieceDefs(heroW, heroH);
-    const bgSize = `${heroW}px ${heroH}px`;
 
     return (
       <section
@@ -109,14 +225,22 @@ export class Hero extends Component<Props, State> {
           overflow: 'hidden',
         }}
       >
-        {/* backdrop */}
-        <div
+        {/* live backdrop */}
+        <video
+          ref={this.setBgVideoRef}
+          src={HERO_VIDEO_SRC}
+          poster={HERO_POSTER_SRC}
+          muted
+          loop
+          autoPlay
+          playsInline
+          preload="auto"
           style={{
             position: 'absolute',
             inset: 0,
-            backgroundImage: `url('${BACKDROP}')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
             opacity: 0.5,
           }}
         />
@@ -129,7 +253,7 @@ export class Hero extends Component<Props, State> {
           }}
         />
 
-        {/* piece layer */}
+        {/* piece layer: slot outlines (DOM) + pieces (canvas) */}
         <div
           style={{
             position: 'absolute',
@@ -141,42 +265,25 @@ export class Hero extends Component<Props, State> {
           }}
         >
           {defs.map((def, i) => (
-            <HeroSlot key={`s${i}`} def={def} visible={heroSlotVisibleAt(def, elapsed)} />
+            <HeroSlot
+              key={`s${i}`}
+              def={def}
+              visible={heroSlotVisibleAt(def, elapsed)}
+            />
           ))}
-          {defs.map((def, i) => {
-            const p = heroPieceAt(def, elapsed);
-            if (!p.visible) return null;
-            return (
-              <div
-                key={`p${i}`}
-                style={{
-                  position: 'absolute',
-                  left: p.left,
-                  top: p.top,
-                  width: p.w,
-                  height: p.h,
-                  transform: `rotate(${p.rot}deg) scale(${p.scale})`,
-                  clipPath: `path('${p.clip}')`,
-                  WebkitClipPath: `path('${p.clip}')`,
-                  overflow: 'hidden',
-                  filter: 'drop-shadow(0 8px 16px rgba(0,0,0,.6))',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: p.vLeft,
-                    top: p.vTop,
-                    width: heroW,
-                    height: heroH,
-                    backgroundImage: `url('${BACKDROP}')`,
-                    backgroundSize: bgSize,
-                    backgroundPosition: '0 0',
-                  }}
-                />
-              </div>
-            );
-          })}
+          <canvas
+            ref={this.setCanvasRef}
+            width={Math.max(1, Math.round(heroW))}
+            height={Math.max(1, Math.round(heroH))}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: heroW,
+              height: heroH,
+              pointerEvents: 'none',
+            }}
+          />
         </div>
 
         {/* headline + CTA — always above pieces */}
