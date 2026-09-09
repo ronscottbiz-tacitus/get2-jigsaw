@@ -1116,6 +1116,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           >
             <div
               ref={this.setStageRef}
+              data-testid="stage"
               onClick={this.deselect}
               style={{
                 position: 'absolute',
@@ -1199,6 +1200,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                 pieceViews.map((pv) => (
                   <div
                     key={pv.id}
+                    data-piece-id={pv.id}
                     onPointerDown={pv.onDown}
                     onPointerMove={pv.onMove}
                     onPointerUp={pv.onUp}
@@ -1283,6 +1285,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
               {handle && (
                 <div
+                  data-testid="rotate-handle"
                   onClick={handle.isButton ? handle.onClick : undefined}
                   onPointerDown={handle.isDrag ? handle.onDown : undefined}
                   onPointerMove={handle.isDrag ? handle.onMove : undefined}

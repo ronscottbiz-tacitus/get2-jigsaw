@@ -24,7 +24,26 @@ npm run dev        # http://localhost:5173
 npm run build      # tsc -b && vite build  → dist/
 npm run preview    # serve the build
 npm run typecheck
+npm test           # vitest run  (jsdom)
 ```
+
+### Tests
+
+`src/game/JigsawGame.playthrough.test.tsx` mounts the real `<JigsawGame>` and
+drives it with DOM pointer events — no engine internals are called directly:
+
+- **Easy · 25 pieces** — drag every piece to its home; asserts all solved, each
+  sitting exactly on its grid coordinate (no gaps), win card shown, best time
+  written to `localStorage`, resume state cleared.
+- **Moderate · 25 pieces** — rotate each piece upright with the 90° handle, then
+  drag home; full solve.
+- **Connect + merge** — two correctly-offset neighbours merge into one group
+  without solving, then the cluster snaps home together.
+- **Double-click teardown** — un-solves a placed piece and decrements the count.
+
+Hard (free drag-to-rotate) isn't in the automated suite — its handle math needs
+real element geometry that jsdom doesn't provide; it shares the same snap/solve
+path as the others.
 
 Node ≥ 20 (developed on 22.23.2). If `node` isn't on your PATH but was
 installed to `~/.local/node`, that's wired into `~/.zshenv`.
