@@ -514,6 +514,15 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       ctx.rotate((p.rotation * Math.PI) / 180);
       ctx.scale(BLEED * liftScale, BLEED * liftScale);
       ctx.translate(-cx, -cy);
+            // Faux-thickness edge: stroke the piece's own path BEFORE clipping.
+      // The stroke is centered on the path, so once the video content is
+      // drawn (clipped to the inner half), only the outer half remains
+      // visible — reading as a cardboard rim, not a shadow. Native canvas
+      // stroke, so this costs nothing like the CSS filter version did.
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = isDragging ? '#b8a98c' : '#cfc3a8';
+      ctx.lineWidth = isDragging ? 6 : 3;
+      ctx.stroke(path);
       ctx.clip(path);
       if (videoReady && this.videoEl) {
         ctx.drawImage(
@@ -530,6 +539,17 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       } else {
         this.paintFallbackSlice(ctx, p, now);
       }
+      // Glossy sheen: same diagonal light-to-dark gradient as image mode,
+      // composited with 'overlay' (canvas's equivalent of CSS mix-blend-mode).
+      const sheen = ctx.createLinearGradient(0, 0, p.boxW, p.boxH);
+      sheen.addColorStop(0, 'rgba(255,255,255,.35)');
+      sheen.addColorStop(0.35, 'rgba(255,255,255,0)');
+      sheen.addColorStop(0.65, 'rgba(0,0,0,0)');
+      sheen.addColorStop(1, 'rgba(0,0,0,.35)');
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.fillStyle = sheen;
+      ctx.fillRect(0, 0, p.boxW, p.boxH);
+      ctx.globalCompositeOperation = 'source-over';
       ctx.restore();
     }
   };
