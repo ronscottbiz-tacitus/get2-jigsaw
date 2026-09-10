@@ -103,3 +103,27 @@ export function wagerPot(elapsedSec: number, parSeconds: number): number {
 export function wagerNet(elapsedSec: number, parSeconds: number): number {
   return wagerPot(elapsedSec, parSeconds) - WAGER_STAKE;
 }
+
+export function wagerUrgency(pot: number): number {
+  const u = 1 - Math.min(1, Math.max(0, pot / WAGER_POT));
+  return u < 0.6 ? (u / 0.6) * 0.5 : 0.5 + ((u - 0.6) / 0.4) * 0.5;
+}
+
+export function wagerColorFor(urgency: number): string {
+  const u = Math.min(1, Math.max(0, urgency));
+  const green: [number, number, number] = [63, 174, 125];
+  const amber: [number, number, number] = [239, 170, 39];
+  const red: [number, number, number] = [229, 72, 77];
+  const [c1, c2, t] =
+    u < 0.5
+      ? [green, amber, u / 0.5]
+      : [amber, red, (u - 0.5) / 0.5];
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(c1[0], c2[0])}, ${mix(c1[1], c2[1])}, ${mix(c1[2], c2[2])})`;
+}
+
+export function wagerTickIntervalMs(parSeconds: number): number {
+  if (!(parSeconds > 0)) return 0;
+  const step = 0.05;
+  return Math.max(50, Math.round((step * parSeconds) / WAGER_STAKE * 1000));
+}
