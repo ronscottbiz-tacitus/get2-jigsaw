@@ -7,6 +7,7 @@ import type { CSSProperties } from 'react';
 import { BG_PRESETS, bgCssFor } from '../game/constants';
 import { VIDEOS } from '../content/library';
 import type { ContentType, Difficulty } from '../game/types';
+import { WagerGauge } from './WagerGauge';
 
 const ACTIVE_BG = 'rgba(63,174,125,.16)';
 const ACTIVE = '#3fae7d';
@@ -37,8 +38,7 @@ interface Props {
   hintAvailable: boolean;
   /** wager mode */
   wagerActive: boolean;
-  wagerLabel: string;
-  wagerColor: string;
+  wagerPot: number;
   wagerLost: boolean;
   wagerBalance: number;
   wagerStake: number;
@@ -174,21 +174,7 @@ export function Toolbar(p: Props) {
           }}
         >
           {p.wagerActive ? (
-            <span style={{ color: p.wagerColor, fontWeight: 700 }}>
-              {p.wagerLabel}
-              {p.wagerLost && (
-                <span
-                  style={{
-                    marginLeft: 6,
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: '#e5484d',
-                  }}
-                >
-                  wager lost
-                </span>
-              )}
-            </span>
+            <WagerGauge pot={p.wagerPot} lost={p.wagerLost} />
           ) : (
             !p.timerHidden && <span>{p.timeLabel}</span>
           )}
