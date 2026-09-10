@@ -258,7 +258,7 @@ export function Toolbar(p: Props) {
         <Seg
           options={[
             ['static', 'Classic'],
-            ['video', 'Live', true],
+            ['video', 'Live'],
           ]}
           value={p.contentType}
           onChange={p.onSetContentType}
@@ -282,7 +282,7 @@ export function Toolbar(p: Props) {
           options={[
             [25, '25'],
             [48, '48'],
-            [96, '96', true],
+            [96, '96'],
           ]}
           value={p.rows * p.cols}
           onChange={p.onSetPieceCount}
@@ -316,7 +316,6 @@ export function Toolbar(p: Props) {
             }}
           >
             🎲 Wager ${p.wagerStake}
-            <ProBadge />
           </button>
 
           <button
