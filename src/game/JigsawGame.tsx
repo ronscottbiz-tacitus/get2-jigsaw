@@ -1197,35 +1197,78 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
               )}
 
               {isImageMode &&
-                pieceViews.map((pv) => (
-                  <div
-                    key={pv.id}
-                    data-piece-id={pv.id}
-                    onPointerDown={pv.onDown}
-                    onPointerMove={pv.onMove}
-                    onPointerUp={pv.onUp}
-                    onDoubleClick={pv.onDouble}
-                    style={{
-                      position: 'absolute',
-                      left: pv.left,
-                      top: pv.top,
-                      width: pv.w,
-                      height: pv.h,
-                      transform: pv.transform,
-                      clipPath: `path('${pv.clip}')`,
-                      WebkitClipPath: `path('${pv.clip}')`,
-                      backgroundImage: `url('${s.imageSrc}')`,
-                      backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
-                      backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
-                      cursor: pv.cursor,
-                      zIndex: pv.z,
-                      boxShadow: pv.shadow,
-                      filter: pv.filter,
-                      transition: pv.transition,
-                      touchAction: 'none',
-                    }}
-                  />
-                ))}
+  pieceViews.map((pv) => {
+    // Faux-thickness edge: a darkened copy of the same shape,
+    // offset down-right. Wider offset while lifted so the piece
+    // visibly rises off it rather than just gaining a blurrier
+    // shadow. Purely cosmetic — no pointer events.
+    const edge = pv.lifted ? 6 : 2;
+    return (
+      <div
+        key={pv.id}
+        style={{
+          position: 'absolute',
+          left: pv.left,
+          top: pv.top,
+          width: pv.w,
+          height: pv.h,
+          transform: pv.transform,
+          zIndex: pv.z,
+          transition: pv.transition,
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transform: `translate(${edge}px, ${edge}px)`,
+            clipPath: `path('${pv.clip}')`,
+            WebkitClipPath: `path('${pv.clip}')`,
+            backgroundImage: `url('${s.imageSrc}')`,
+            backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
+            backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
+            filter: 'brightness(0.5) saturate(0.7)',
+            transition: 'transform .12s ease-out',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          data-piece-id={pv.id}
+          onPointerDown={pv.onDown}
+          onPointerMove={pv.onMove}
+          onPointerUp={pv.onUp}
+          onDoubleClick={pv.onDouble}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            clipPath: `path('${pv.clip}')`,
+            WebkitClipPath: `path('${pv.clip}')`,
+            backgroundImage: `url('${s.imageSrc}')`,
+            backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
+            backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
+            cursor: pv.cursor,
+            boxShadow: pv.shadow,
+            filter: pv.filter,
+            touchAction: 'none',
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            clipPath: `path('${pv.clip}')`,
+            WebkitClipPath: `path('${pv.clip}')`,
+            background:
+              'linear-gradient(135deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,.35) 100%)',
+            mixBlendMode: 'overlay',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+    );
+  })}
 
               {isVideoMode && (
                 <>
@@ -1410,6 +1453,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           shadow: 'none',
           filter: 'none',
           transition: 'none',
+          lifted: false,
           onDown: NOOP,
           onMove: NOOP,
           onUp: NOOP,
@@ -1432,6 +1476,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           shadow: 'none',
           filter: 'drop-shadow(0 9px 14px rgba(0,0,0,.5))',
           transition: 'none',
+          lifted: false,
           onDown: NOOP,
           onMove: NOOP,
           onUp: NOOP,
@@ -1487,6 +1532,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         shadow,
         filter,
         transition,
+        lifted: isDragging,
         onDown: (e) => this.onPieceDown(p.id, e),
         onMove: (e) => this.onPieceMove(p.id, e),
         onUp: (e) => this.onPieceUp(p.id, e),
@@ -1513,6 +1559,9 @@ interface PieceView {
   shadow: string;
   filter: string;
   transition: string;
+    /** true while the piece is picked up (drag start fires on pointerdown, so
+   * this is also "selected") — widens the faux-thickness edge underneath it. */
+  lifted: boolean;
   onDown: (e: React.PointerEvent) => void;
   onMove: (e: React.PointerEvent) => void;
   onUp: (e: React.PointerEvent) => void;
