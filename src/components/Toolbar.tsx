@@ -56,26 +56,47 @@ interface Props {
   onSetBgColor: (hex: string) => void;
 }
 
+function ProBadge() {
+  return (
+    <span
+      style={{
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: 0.3,
+        color: '#412402',
+        background: '#efaa27',
+        borderRadius: 4,
+        padding: '1px 4px',
+        marginLeft: 5,
+        verticalAlign: 1,
+      }}
+    >
+      PRO
+    </span>
+  );
+}
+
 function Seg<T extends string | number>({
   options,
   value,
   onChange,
   small,
 }: {
-  options: [T, string][];
+  options: [T, string, boolean?][];
   value: T;
   onChange: (v: T) => void;
   small?: boolean;
 }) {
   return (
     <div style={{ ...SEG_WRAP, borderRadius: small ? 9 : 10 }}>
-      {options.map(([key, label]) => {
+      {options.map(([key, label, premium]) => {
         const active = key === value;
         return (
           <button
             key={String(key)}
             type="button"
             onClick={() => onChange(key)}
+            title={premium ? 'Premium feature — free during testing' : undefined}
             style={{
               padding: small ? '6px 12px' : '8px 20px',
               borderRadius: small ? 6 : 7,
@@ -87,7 +108,8 @@ function Seg<T extends string | number>({
               border: 'none',
             }}
           >
-            {label}
+            label}
+            {premium && <ProBadge />}
           </button>
         );
       })}
@@ -236,7 +258,7 @@ export function Toolbar(p: Props) {
         <Seg
           options={[
             ['static', 'Classic'],
-            ['video', 'Live'],
+            ['video', 'Live', true],
           ]}
           value={p.contentType}
           onChange={p.onSetContentType}
@@ -260,7 +282,7 @@ export function Toolbar(p: Props) {
           options={[
             [25, '25'],
             [48, '48'],
-            [96, '96'],
+            [96, '96', true],
           ]}
           value={p.rows * p.cols}
           onChange={p.onSetPieceCount}
@@ -294,6 +316,7 @@ export function Toolbar(p: Props) {
             }}
           >
             🎲 Wager ${p.wagerStake}
+            <ProBadge />
           </button>
 
           <button
