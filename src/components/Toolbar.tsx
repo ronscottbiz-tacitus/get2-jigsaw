@@ -108,7 +108,7 @@ function Seg<T extends string | number>({
               border: 'none',
             }}
           >
-            label}
+            {label}
             {premium && <ProBadge />}
           </button>
         );
