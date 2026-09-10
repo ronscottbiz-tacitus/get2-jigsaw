@@ -1198,11 +1198,20 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
               {isImageMode &&
   pieceViews.map((pv) => {
-    // Faux-thickness edge: a darkened copy of the same shape,
-    // offset down-right. Wider offset while lifted so the piece
-    // visibly rises off it rather than just gaining a blurrier
-    // shadow. Purely cosmetic — no pointer events.
-    const edge = pv.lifted ? 6 : 2;
+    // Faux-thickness edge: a solid cardboard-colored outline
+    // that hugs the piece's exact silhouette (tabs and all).
+    // Four zero-blur drop-shadows, one per direction, stack up
+    // into a clean rim rather than a soft glow. Wider + a touch
+    // darker while lifted, so the piece reads as physically
+    // thicker once it's picked up.
+    const rim = pv.lifted ? 2 : 1;
+    const rimColor = pv.lifted ? '#b8a98c' : '#cfc3a8';
+    const outline = [
+      `drop-shadow(${rim}px 0 0 ${rimColor})`,
+      `drop-shadow(-${rim}px 0 0 ${rimColor})`,
+      `drop-shadow(0 ${rim}px 0 ${rimColor})`,
+      `drop-shadow(0 -${rim}px 0 ${rimColor})`,
+    ].join(' ');
     return (
       <div
         key={pv.id}
@@ -1217,22 +1226,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           transition: pv.transition,
         }}
       >
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            transform: `translate(${edge}px, ${edge}px)`,
-            clipPath: `path('${pv.clip}')`,
-            WebkitClipPath: `path('${pv.clip}')`,
-            backgroundImage: `url('${s.imageSrc}')`,
-            backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
-            backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
-            filter: 'brightness(0.5) saturate(0.7)',
-            transition: 'transform .12s ease-out',
-            pointerEvents: 'none',
-          }}
-        />
         <div
           data-piece-id={pv.id}
           onPointerDown={pv.onDown}
@@ -1249,7 +1242,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
             backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
             cursor: pv.cursor,
             boxShadow: pv.shadow,
-            filter: pv.filter,
+            filter: `${outline} ${pv.filter}`,
             touchAction: 'none',
           }}
         />
