@@ -1225,7 +1225,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     // outline, which forced the browser to rasterize+blur
     // every piece's silhouette on every interaction and caused
     // real click lag at higher piece counts.
-    const rimPx = pv.lifted ? 3 : 1.5;
+    const rimPx = pv.lifted ? 2 : 1;
     const rimColor = pv.lifted ? '#b8a98c' : '#cfc3a8';
     const rimScale =
       1 + (rimPx * 2) / Math.max(pv.w, pv.h, 1);
