@@ -35,6 +35,14 @@ interface Props {
   totalPieces: number;
   currentImageLabel: string;
   hintAvailable: boolean;
+  /** wager mode */
+  wagerActive: boolean;
+  wagerLabel: string;
+  wagerColor: string;
+  wagerLost: boolean;
+  wagerBalance: number;
+  wagerStake: number;
+  onToggleWager: () => void;
   onShowWelcome?: () => void;
   onSetContentType: (t: ContentType) => void;
   onSetPieceCount: (n: number) => void;
@@ -165,7 +173,25 @@ export function Toolbar(p: Props) {
             color: '#a39a8d',
           }}
         >
-          {!p.timerHidden && <span>{p.timeLabel}</span>}
+          {p.wagerActive ? (
+            <span style={{ color: p.wagerColor, fontWeight: 700 }}>
+              {p.wagerLabel}
+              {p.wagerLost && (
+                <span
+                  style={{
+                    marginLeft: 6,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#e5484d',
+                  }}
+                >
+                  wager lost
+                </span>
+              )}
+            </span>
+          ) : (
+            !p.timerHidden && <span>{p.timeLabel}</span>
+          )}
           <button
             type="button"
             onClick={p.onToggleTimerHidden}
@@ -194,6 +220,19 @@ export function Toolbar(p: Props) {
           </button>
           <span>
             {p.solvedCount} / {p.totalPieces}
+          </span>
+          <span
+            title="Fake wager balance"
+            style={{
+              color:
+                p.wagerBalance > 0
+                  ? '#3fae7d'
+                  : p.wagerBalance < 0
+                    ? '#e5484d'
+                    : '#a39a8d',
+            }}
+          >
+            Bal ${p.wagerBalance.toFixed(2)}
           </span>
         </div>
       </div>
@@ -252,6 +291,25 @@ export function Toolbar(p: Props) {
         />
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={p.onToggleWager}
+            title={
+              p.wagerActive
+                ? 'Wager armed — the pot counts down once the puzzle breaks apart'
+                : `Bet $${p.wagerStake}, matched to a $10 pot`
+            }
+            style={{
+              ...pill,
+              color: p.wagerActive ? ACTIVE : IDLE,
+              border: `1px solid ${
+                p.wagerActive ? 'rgba(63,174,125,.4)' : 'rgba(255,255,255,.12)'
+              }`,
+            }}
+          >
+            🎲 Wager ${p.wagerStake}
+          </button>
+
           <button
             type="button"
             onClick={p.onToggleGhost}

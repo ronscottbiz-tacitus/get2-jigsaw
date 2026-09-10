@@ -6,7 +6,12 @@
  * Every access is guarded; a disabled/full/private-mode store degrades to "no
  * saved data" rather than throwing.
  */
-import { BEST_TIMES_KEY, PROGRESS_KEY, WELCOMED_KEY } from './constants';
+import {
+  BEST_TIMES_KEY,
+  PROGRESS_KEY,
+  WAGER_BALANCE_KEY,
+  WELCOMED_KEY,
+} from './constants';
 import type { ContentType, Difficulty, SavedProgress } from './types';
 
 interface ConfigLike {
@@ -50,6 +55,27 @@ export function bestTimesFor(cfg: ConfigLike): number[] {
     return all[configKey(cfg)] || [];
   } catch {
     return [];
+  }
+}
+
+/** Persistent fake wager balance (dollars, may be negative). Defaults to 0 for
+ * a first-time player or an unreadable store. */
+export function getWagerBalance(): number {
+  try {
+    const raw = localStorage.getItem(WAGER_BALANCE_KEY);
+    if (raw == null) return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setWagerBalance(n: number): void {
+  try {
+    localStorage.setItem(WAGER_BALANCE_KEY, String(n));
+  } catch {
+    /* storage unavailable */
   }
 }
 

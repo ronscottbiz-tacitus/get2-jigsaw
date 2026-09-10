@@ -172,6 +172,79 @@ class SoundKit {
     }
     this.vibrate([0, 20, 40, 20, 40, 30]);
   }
+
+  /**
+   * Periodic countdown blip while a wager round is live. `intensity` runs 0
+   * (pot full, $10) → 1 (pot empty, $0); it raises the pitch and volume and
+   * shortens each blip, so the ticking audibly tightens as the pot drains.
+   */
+  wagerTick(intensity = 0) {
+    const k = Math.min(1, Math.max(0, intensity));
+    try {
+      const ctx = this.ac();
+      const now = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(430 + k * 690, now); // ~430 → ~1120 Hz
+      const vol = 0.035 + k * 0.11; // ~0.035 → ~0.15
+      const dur = 0.055 - k * 0.025; // ~0.055 → ~0.03 s
+      g.gain.setValueAtTime(vol, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(now);
+      o.stop(now + dur + 0.02);
+    } catch {
+      /* audio unavailable */
+    }
+    this.vibrate(k > 0.7 ? 9 : 4);
+  }
+
+  /** Bright rising triad — the wager round netted a win. */
+  wagerWin() {
+    try {
+      const ctx = this.ac();
+      const now = ctx.currentTime;
+      [523.25, 659.25, 987.77].forEach((freq, i) => {
+        const t = now + i * 0.07;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(freq, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.2, t + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        o.connect(g).connect(ctx.destination);
+        o.start(t);
+        o.stop(t + 0.4);
+      });
+    } catch {
+      /* audio unavailable */
+    }
+    this.vibrate([0, 18, 26, 22]);
+  }
+
+  /** Low descending buzz — the wager round netted a loss. */
+  wagerLoss() {
+    try {
+      const ctx = this.ac();
+      const now = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(240, now);
+      o.frequency.exponentialRampToValueAtTime(85, now + 0.5);
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.17, now + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+      o.connect(g).connect(ctx.destination);
+      o.start(now);
+      o.stop(now + 0.6);
+    } catch {
+      /* audio unavailable */
+    }
+    this.vibrate([0, 45, 60, 45]);
+  }
 }
 
 export const sound = new SoundKit();

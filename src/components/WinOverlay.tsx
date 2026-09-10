@@ -14,6 +14,8 @@ interface Props {
   currentTime: number;
   showStatsCard: boolean;
   configKey: string;
+  /** net $ from a wager round that just resolved (+won / −lost); null if none. */
+  wagerResultNet?: number | null;
   setRevealVideoRef: (el: HTMLVideoElement | null) => void;
   onPlayAgain: () => void;
 }
@@ -31,9 +33,15 @@ export function WinOverlay({
   bestTimes,
   currentTime,
   showStatsCard,
+  wagerResultNet,
   setRevealVideoRef,
   onPlayAgain,
 }: Props) {
+  const wagerWon = wagerResultNet != null && wagerResultNet >= 0;
+  const wagerText =
+    wagerResultNet == null
+      ? null
+      : `${wagerResultNet >= 0 ? '+' : '−'}$${Math.abs(wagerResultNet).toFixed(2)}`;
   return (
     <>
       <div
@@ -144,6 +152,19 @@ export function WinOverlay({
             <div style={{ fontSize: 13, color: '#8a93a6', marginBottom: 18 }}>
               Finished in {timeLabel}
             </div>
+
+            {wagerText != null && (
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 700,
+                  marginBottom: 18,
+                  color: wagerWon ? '#3fae7d' : '#e5484d',
+                }}
+              >
+                Wager {wagerWon ? 'won' : 'lost'} {wagerText}
+              </div>
+            )}
 
             {bestTimes.length > 0 && (
               <div style={{ marginBottom: 20 }}>

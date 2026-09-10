@@ -7,10 +7,19 @@
  * directly — only events are dispatched and the public `state` is read.
  */
 import { createRef } from 'react';
-import { render, fireEvent, waitFor, screen } from '@testing-library/react';
+import { render, fireEvent, waitFor, screen, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { JigsawGame } from './JigsawGame';
-import { BEST_TIMES_KEY, PROGRESS_KEY } from './constants';
+import {
+  BEST_TIMES_KEY,
+  PROGRESS_KEY,
+  WAGER_BALANCE_KEY,
+  WAGER_STAKE,
+  wagerNet,
+  wagerParSeconds,
+  wagerPot,
+} from './constants';
+import { getWagerBalance, setWagerBalance } from './persistence';
 import type { Piece } from './types';
 
 beforeEach(() => {
@@ -186,5 +195,117 @@ describe('double-click pulls a solved piece back apart', () => {
     const after = game.state.pieces.find((p) => p.id === first.id)!;
     expect(after.solved).toBe(false);
     expect(game.state.solvedCount).toBe(solvedNow - 1);
+  }, 30_000);
+});
+
+// -- wager mode -----------------------------------------------------------
+
+describe('wager math (pure)', () => {
+  it('par time scales by pieces and difficulty', () => {
+    expect(wagerParSeconds(25, 'moderate')).toBe(25 * 3.2 * 1.0);
+    expect(wagerParSeconds(25, 'easy')).toBe(25 * 3.2 * 0.75);
+    expect(wagerParSeconds(25, 'hard')).toBe(25 * 3.2 * 1.35);
+  });
+
+  it('pot: $10 at t=0, exactly $5 at par, $0 floor at 2×par, never lower', () => {
+    const par = wagerParSeconds(48, 'moderate');
+    expect(wagerPot(0, par)).toBe(10);
+    expect(wagerPot(par, par)).toBeCloseTo(5, 6);
+    expect(wagerPot(2 * par, par)).toBe(0);
+    expect(wagerPot(10 * par, par)).toBe(0); // clamped, not negative
+  });
+
+  it('net is capped at losing exactly the $5 stake', () => {
+    const par = wagerParSeconds(25, 'easy');
+    expect(wagerNet(0, par)).toBe(5); // pot 10 − stake 5
+    expect(wagerNet(par, par)).toBeCloseTo(0, 6); // break-even
+    expect(wagerNet(999_999, par)).toBe(-WAGER_STAKE); // worst case
+  });
+
+  it('getWagerBalance defaults to 0 and round-trips through localStorage', () => {
+    localStorage.clear();
+    expect(getWagerBalance()).toBe(0);
+    setWagerBalance(-3.4);
+    expect(getWagerBalance()).toBe(-3.4);
+    setWagerBalance(12.6);
+    expect(getWagerBalance()).toBe(12.6);
+  });
+});
+
+describe('wager mode — integration', () => {
+  it('toggle off (default): a normal solve writes no wager balance and shows no wager line', async () => {
+    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25 });
+    expect(game.state.wagerActive).toBe(false);
+
+    for (let g = 0; g < 200; g++) {
+      const next = game.state.pieces.find((p) => !p.solved);
+      if (!next) break;
+      dragPieceTo(view.container, next, next.homeLeft, next.homeTop);
+    }
+    await expectWinCard();
+    expect(screen.queryByText(/Wager (won|lost)/i)).toBeNull();
+    expect(localStorage.getItem(WAGER_BALANCE_KEY)).toBeNull();
+    expect(game.state.wagerResultNet).toBeNull();
+  }, 30_000);
+
+  it('toggle on, solve fast: nets a win, persists the balance, resets wagerActive, shows the result', async () => {
+    localStorage.clear();
+    setWagerBalance(2); // start with an existing fake balance
+    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25 });
+
+    // arm the wager (button near the piece-count / difficulty controls)
+    fireEvent.click(screen.getByRole('button', { name: /Wager \$5/i }));
+    expect(game.state.wagerActive).toBe(true);
+    expect(game.state.wagerParSec).toBeCloseTo(wagerParSeconds(25, 'easy'), 6);
+
+    // the time chip is now the live pot ($10.00 at t≈0)
+    expect(screen.getByText(/^\$\d+\.\d\d$/)).toBeTruthy();
+
+    for (let g = 0; g < 200; g++) {
+      const next = game.state.pieces.find((p) => !p.solved);
+      if (!next) break;
+      dragPieceTo(view.container, next, next.homeLeft, next.homeTop);
+    }
+
+    // solved near-instantly in jsdom → pot ~$10 → net ~+$5
+    const net = game.state.wagerResultNet!;
+    expect(net).toBeGreaterThan(4);
+    expect(net).toBeLessThanOrEqual(5);
+    expect(game.state.wagerActive).toBe(false); // reset after resolving
+    expect(game.state.wagerBalance).toBeCloseTo(2 + net, 6);
+    expect(getWagerBalance()).toBeCloseTo(2 + net, 6); // persisted
+
+    await screen.findByText(/Wager won/i, {}, { timeout: 3000 });
+    expect(screen.getByText(/\+\$/)).toBeTruthy();
+  }, 30_000);
+
+  it('toggle on, then run the pot to $0: chip floors at $0 with a "wager lost" label, play continues', async () => {
+    localStorage.clear();
+    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25 });
+    fireEvent.click(screen.getByRole('button', { name: /Wager \$5/i }));
+
+    // fast-forward the clock past 2×par so the pot floors
+    const par = game.state.wagerParSec;
+    act(() => {
+      game.setState({
+        startTime: Date.now() - (2 * par + 30) * 1000,
+        elapsedSec: Math.ceil(2 * par + 30),
+      });
+    });
+    await waitFor(() => {
+      // chip shows $0.00 and the lost label
+      expect(screen.getByText('$0.00')).toBeTruthy();
+    });
+    expect(screen.getByText(/wager lost/i)).toBeTruthy();
+
+    // puzzle is still fully playable — solve it and it resolves as a full loss
+    for (let g = 0; g < 200; g++) {
+      const next = game.state.pieces.find((p) => !p.solved);
+      if (!next) break;
+      dragPieceTo(view.container, next, next.homeLeft, next.homeTop);
+    }
+    expect(game.state.solvedCount).toBe(25);
+    expect(game.state.wagerResultNet).toBe(-WAGER_STAKE);
+    await screen.findByText(/Wager lost/i, {}, { timeout: 3000 });
   }, 30_000);
 });

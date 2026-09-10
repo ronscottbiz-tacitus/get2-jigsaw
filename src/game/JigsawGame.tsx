@@ -26,7 +26,12 @@ import {
   PIECE_COUNT_PRESETS,
   STAGE_H,
   STAGE_W,
+  WAGER_POT,
+  WAGER_STAKE,
   bgCssFor,
+  wagerNet,
+  wagerParSeconds,
+  wagerPot,
 } from './constants';
 import { generateGeometry } from './geometry';
 import {
@@ -41,10 +46,12 @@ import {
   bestTimesFor,
   clearProgress,
   configKey,
+  getWagerBalance,
   isValidProgress,
   loadProgress,
   recordBestTime,
   saveProgress,
+  setWagerBalance,
 } from './persistence';
 import type {
   ContentType,
@@ -101,6 +108,15 @@ interface JigsawGameState {
   showStatsCard: boolean;
   introPhase: IntroPhase;
   introPulse: boolean;
+  /** Wager mode (optional fake-money bet on the current round). */
+  wagerActive: boolean;
+  /** Par time (s) locked in for this round when the wager was armed. */
+  wagerParSec: number;
+  /** Persistent fake balance, loaded from localStorage on mount. */
+  wagerBalance: number;
+  /** Net $ result of the just-resolved wager round, for the win overlay
+   * (positive = won, negative = lost). null when no wager was in play. */
+  wagerResultNet: number | null;
 }
 
 interface DragState {
@@ -175,6 +191,10 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     showStatsCard: false,
     introPhase: null,
     introPulse: false,
+    wagerActive: false,
+    wagerParSec: 0,
+    wagerBalance: getWagerBalance(),
+    wagerResultNet: null,
   };
 
   // ---- lifecycle -------------------------------------------------------
@@ -206,6 +226,16 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         this.setState((st) => ({
           elapsedSec: Math.floor((Date.now() - st.startTime) / 1000),
         }));
+        // wager countdown cue — piggy-backs on this 1s tick (no extra interval).
+        if (s.wagerActive) {
+          const el = Math.floor((Date.now() - s.startTime) / 1000);
+          const pot = wagerPot(el, s.wagerParSec);
+          const intensity = 1 - pot / WAGER_POT;
+          sound.wagerTick(intensity);
+          // a second blip near $0 for a "faster" feel, without a real interval.
+          if (intensity > 0.7 && pot > 0)
+            window.setTimeout(() => sound.wagerTick(intensity), 380);
+        }
       }
     }, 1000);
     this.saveTimer = window.setInterval(this.persist, 5000);
@@ -295,6 +325,24 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     clearProgress();
     recordBestTime(this.state, this.state.elapsedSec);
     sound.winChime();
+
+    // settle the wager, if one was in play for this round
+    if (this.state.wagerActive) {
+      const net =
+        Math.round(wagerNet(this.state.elapsedSec, this.state.wagerParSec) * 100) /
+        100;
+      const newBalance =
+        Math.round((this.state.wagerBalance + net) * 100) / 100;
+      setWagerBalance(newBalance);
+      if (net >= 0) sound.wagerWin();
+      else sound.wagerLoss();
+      this.setState({
+        wagerBalance: newBalance,
+        wagerActive: false,
+        wagerResultNet: net,
+      });
+    }
+
     clearTimeout(this.statsTO);
     this.setState({ showStatsCard: false });
     this.statsTO = window.setTimeout(
@@ -332,6 +380,10 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       pulseGroupId: null,
       hintPieceId: null,
       showStatsCard: false,
+      // a resumed round never carries a live wager (par time isn't persisted).
+      wagerActive: false,
+      wagerParSec: 0,
+      wagerResultNet: null,
     });
     if (saved.contentType === 'video' && this.videoEl) {
       this.videoEl.currentTime = 0;
@@ -653,6 +705,11 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       showStatsCard: false,
       introPhase: 'hold',
       introPulse: false,
+      // if the wager toggle is armed, lock this round's par time now.
+      wagerParSec: this.state.wagerActive
+        ? wagerParSeconds(rows * cols, difficulty)
+        : 0,
+      wagerResultNet: null,
     });
 
     this.introPulseTO = window.setTimeout(() => {
@@ -728,6 +785,21 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   };
   private setDifficulty = (d: Difficulty) =>
     this.newGame(this.state.rows, this.state.cols, d);
+
+  /** Arm / disarm the $5 wager. Arm it before "New game" to lock this round's
+   * par time; disarming mid-round just drops the bet with no settlement. */
+  private toggleWager = () => {
+    this.setState((s) => {
+      const wagerActive = !s.wagerActive;
+      return {
+        wagerActive,
+        wagerParSec: wagerActive
+          ? wagerParSeconds(s.rows * s.cols, s.difficulty)
+          : 0,
+        wagerResultNet: null,
+      };
+    });
+  };
 
   // ---- piece mutation helpers -------------------------------
 
@@ -1043,6 +1115,14 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     const bestTimes = isWon ? bestTimesFor(s) : [];
 
+    // live wager pot — replaces the time chip while a bet is in play
+    const wagerPotNow = s.wagerActive
+      ? wagerPot(s.elapsedSec, s.wagerParSec)
+      : 0;
+    const wagerLabel = `$${wagerPotNow.toFixed(2)}`;
+    const wagerColor = wagerPotNow > WAGER_STAKE ? '#3fae7d' : '#e5484d';
+    const wagerLost = s.wagerActive && wagerPotNow <= 0;
+
     return (
       <div
         style={{
@@ -1096,6 +1176,13 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           totalPieces={s.pieces.length}
           currentImageLabel={labelForSrc('static', s.imageSrc)}
           hintAvailable={s.pieces.some((p) => !p.solved)}
+          wagerActive={s.wagerActive}
+          wagerLabel={wagerLabel}
+          wagerColor={wagerColor}
+          wagerLost={wagerLost}
+          wagerBalance={s.wagerBalance}
+          wagerStake={WAGER_STAKE}
+          onToggleWager={this.toggleWager}
           onShowWelcome={this.props.onShowWelcome}
           onSetContentType={this.setContentType}
           onSetPieceCount={this.setPieceCount}
@@ -1387,6 +1474,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                   currentTime={s.elapsedSec}
                   showStatsCard={s.showStatsCard}
                   configKey={configKey(s)}
+                  wagerResultNet={s.wagerResultNet}
                   setRevealVideoRef={this.setRevealVideoRef}
                   onPlayAgain={this.newGameClick}
                 />
