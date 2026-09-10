@@ -26,12 +26,13 @@ import {
   PIECE_COUNT_PRESETS,
   STAGE_H,
   STAGE_W,
-  WAGER_POT,
   WAGER_STAKE,
   bgCssFor,
   wagerNet,
   wagerParSeconds,
   wagerPot,
+  wagerTickIntervalMs,
+  wagerUrgency,
 } from './constants';
 import { generateGeometry } from './geometry';
 import {
@@ -114,9 +115,13 @@ interface JigsawGameState {
   wagerParSec: number;
   /** Persistent fake balance, loaded from localStorage on mount. */
   wagerBalance: number;
-  /** Net $ result of the just-resolved wager round, for the win overlay
+    /** Net $ result of the just-resolved wager round, for the win overlay
    * (positive = won, negative = lost). null when no wager was in play. */
   wagerResultNet: number | null;
+  /** Continuously-updated elapsed seconds while a wager is live, driven by
+   * the dedicated nickel-cadence ticker (not the once-per-second display
+   * clock) — this is what the gauge and its color/urgency read from. */
+  wagerElapsedSec: number;
 }
 
 interface DragState {
@@ -154,6 +159,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private hitCtx: CanvasRenderingContext2D | null = null;
   private timer?: number;
   private saveTimer?: number;
+  private wagerTimer?: number;
   private hintTO?: number;
   private pulseTO?: number;
   private statsTO?: number;
@@ -195,6 +201,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     wagerParSec: 0,
     wagerBalance: getWagerBalance(),
     wagerResultNet: null,
+    wagerElapsedSec: 0,
   };
 
   // ---- lifecycle -------------------------------------------------------
@@ -220,22 +227,12 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       this.newGame(preset[0], preset[1], d);
     }
 
-    this.timer = window.setInterval(() => {
+      this.timer = window.setInterval(() => {
       const s = this.state;
       if (s.pieces.length && !s.introPhase && s.solvedCount !== s.pieces.length) {
         this.setState((st) => ({
           elapsedSec: Math.floor((Date.now() - st.startTime) / 1000),
         }));
-        // wager countdown cue — piggy-backs on this 1s tick (no extra interval).
-        if (s.wagerActive) {
-          const el = Math.floor((Date.now() - s.startTime) / 1000);
-          const pot = wagerPot(el, s.wagerParSec);
-          const intensity = 1 - pot / WAGER_POT;
-          sound.wagerTick(intensity);
-          // a second blip near $0 for a "faster" feel, without a real interval.
-          if (intensity > 0.7 && pot > 0)
-            window.setTimeout(() => sound.wagerTick(intensity), 380);
-        }
       }
     }, 1000);
     this.saveTimer = window.setInterval(this.persist, 5000);
@@ -248,6 +245,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   componentWillUnmount() {
     clearInterval(this.timer);
     clearInterval(this.saveTimer);
+    this.stopWagerTicker();
     clearTimeout(this.hintTO);
     clearTimeout(this.pulseTO);
     clearTimeout(this.statsTO);
@@ -326,8 +324,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     recordBestTime(this.state, this.state.elapsedSec);
     sound.winChime();
 
-    // settle the wager, if one was in play for this round
+ // settle the wager, if one was in play for this round
     if (this.state.wagerActive) {
+      this.stopWagerTicker();
       const net =
         Math.round(wagerNet(this.state.elapsedSec, this.state.wagerParSec) * 100) /
         100;
@@ -380,11 +379,13 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       pulseGroupId: null,
       hintPieceId: null,
       showStatsCard: false,
-      // a resumed round never carries a live wager (par time isn't persisted).
+   // a resumed round never carries a live wager (par time isn't persisted).
       wagerActive: false,
       wagerParSec: 0,
       wagerResultNet: null,
+      wagerElapsedSec: 0,
     });
+    this.stopWagerTicker();
     if (saved.contentType === 'video' && this.videoEl) {
       this.videoEl.currentTime = 0;
       void this.videoEl.play().catch(() => {});
@@ -710,7 +711,13 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         ? wagerParSeconds(rows * cols, difficulty)
         : 0,
       wagerResultNet: null,
+      wagerElapsedSec: 0,
     });
+    if (this.state.wagerActive) {
+      this.startWagerTicker(wagerParSeconds(rows * cols, difficulty));
+    } else {
+      this.stopWagerTicker();
+    }
 
     this.introPulseTO = window.setTimeout(() => {
       if (this.state.introPhase === 'hold') this.setState({ introPulse: true });
@@ -791,16 +798,41 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private toggleWager = () => {
     this.setState((s) => {
       const wagerActive = !s.wagerActive;
+      const wagerParSec = wagerActive
+        ? wagerParSeconds(s.rows * s.cols, s.difficulty)
+        : 0;
+      if (wagerActive) this.startWagerTicker(wagerParSec);
+      else this.stopWagerTicker();
       return {
         wagerActive,
-        wagerParSec: wagerActive
-          ? wagerParSeconds(s.rows * s.cols, s.difficulty)
-          : 0,
+        wagerParSec,
         wagerResultNet: null,
+        wagerElapsedSec: 0,
       };
     });
   };
 
+  private startWagerTicker(parSec: number) {
+    this.stopWagerTicker();
+    const ms = wagerTickIntervalMs(parSec);
+    if (ms <= 0) return;
+    this.wagerTimer = window.setInterval(() => {
+      this.setState((s) => {
+        if (!s.wagerActive) return null;
+        const elapsed = (Date.now() - s.startTime) / 1000;
+        const pot = wagerPot(elapsed, s.wagerParSec);
+        sound.wagerTick(wagerUrgency(pot));
+        return { wagerElapsedSec: elapsed };
+      });
+    }, ms);
+  }
+
+  private stopWagerTicker() {
+    if (this.wagerTimer != null) {
+      clearInterval(this.wagerTimer);
+      this.wagerTimer = undefined;
+    }
+  }
   // ---- piece mutation helpers -------------------------------
 
   private updatePiece(id: string, patch: Partial<Piece>) {
@@ -1115,12 +1147,12 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     const bestTimes = isWon ? bestTimesFor(s) : [];
 
-    // live wager pot — replaces the time chip while a bet is in play
+    // live wager pot — replaces the time chip while a bet is in play. Reads
+    // wagerElapsedSec (updated by the dedicated nickel ticker), not the
+    // once-per-second elapsedSec, so it moves at the real payout cadence.
     const wagerPotNow = s.wagerActive
-      ? wagerPot(s.elapsedSec, s.wagerParSec)
+      ? wagerPot(s.wagerElapsedSec, s.wagerParSec)
       : 0;
-    const wagerLabel = `$${wagerPotNow.toFixed(2)}`;
-    const wagerColor = wagerPotNow > WAGER_STAKE ? '#3fae7d' : '#e5484d';
     const wagerLost = s.wagerActive && wagerPotNow <= 0;
 
     return (
@@ -1177,8 +1209,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           currentImageLabel={labelForSrc('static', s.imageSrc)}
           hintAvailable={s.pieces.some((p) => !p.solved)}
           wagerActive={s.wagerActive}
-          wagerLabel={wagerLabel}
-          wagerColor={wagerColor}
+          wagerPot={wagerPotNow}
           wagerLost={wagerLost}
           wagerBalance={s.wagerBalance}
           wagerStake={WAGER_STAKE}
