@@ -1198,20 +1198,17 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
               {isImageMode &&
   pieceViews.map((pv) => {
-    // Faux-thickness edge: a solid cardboard-colored outline
-    // that hugs the piece's exact silhouette (tabs and all).
-    // Four zero-blur drop-shadows, one per direction, stack up
-    // into a clean rim rather than a soft glow. Wider + a touch
-    // darker while lifted, so the piece reads as physically
-    // thicker once it's picked up.
-    const rim = pv.lifted ? 2 : 1;
+    // Faux-thickness edge: a solid cardboard-colored copy of
+    // the same shape, scaled up slightly so it peeks out
+    // evenly on every side as a rim. This is a flat color with
+    // NO filter — cheap to paint — unlike a drop-shadow-based
+    // outline, which forced the browser to rasterize+blur
+    // every piece's silhouette on every interaction and caused
+    // real click lag at higher piece counts.
+    const rimPx = pv.lifted ? 3 : 1.5;
     const rimColor = pv.lifted ? '#b8a98c' : '#cfc3a8';
-    const outline = [
-      `drop-shadow(${rim}px 0 0 ${rimColor})`,
-      `drop-shadow(-${rim}px 0 0 ${rimColor})`,
-      `drop-shadow(0 ${rim}px 0 ${rimColor})`,
-      `drop-shadow(0 -${rim}px 0 ${rimColor})`,
-    ].join(' ');
+    const rimScale =
+      1 + (rimPx * 2) / Math.max(pv.w, pv.h, 1);
     return (
       <div
         key={pv.id}
@@ -1226,6 +1223,19 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           transition: pv.transition,
         }}
       >
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transform: `scale(${rimScale})`,
+            clipPath: `path('${pv.clip}')`,
+            WebkitClipPath: `path('${pv.clip}')`,
+            background: rimColor,
+            transition: 'transform .12s ease-out',
+            pointerEvents: 'none',
+          }}
+        />
         <div
           data-piece-id={pv.id}
           onPointerDown={pv.onDown}
@@ -1242,7 +1252,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
             backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
             cursor: pv.cursor,
             boxShadow: pv.shadow,
-            filter: `${outline} ${pv.filter}`,
+            filter: pv.filter,
             touchAction: 'none',
           }}
         />
