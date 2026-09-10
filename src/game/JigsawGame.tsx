@@ -521,7 +521,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       // stroke, so this costs nothing like the CSS filter version did.
       ctx.lineJoin = 'round';
       ctx.strokeStyle = isDragging ? '#b8a98c' : '#cfc3a8';
-      ctx.lineWidth = isDragging ? 6 : 3;
+      ctx.lineWidth = isDragging ? 4 : 2;
       ctx.stroke(path);
       ctx.clip(path);
       if (videoReady && this.videoEl) {
