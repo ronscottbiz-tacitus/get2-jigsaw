@@ -435,7 +435,7 @@ export function Toolbar(p: Props) {
               marginLeft: 2,
             }}
           >
-            {BG_PRESETS.map(({ hex }) => (
+            {BG_PRESETS.map(({ hex, css }) => (
               <button
                 key={hex}
                 type="button"
@@ -445,7 +445,7 @@ export function Toolbar(p: Props) {
                   width: 20,
                   height: 20,
                   borderRadius: '50%',
-                  background: bgCssFor(hex, 40),
+                  background: css ?? bgCssFor(hex, 40),
                   boxShadow:
                     p.bgColor === hex
                       ? '0 0 0 2px #3fae7d'

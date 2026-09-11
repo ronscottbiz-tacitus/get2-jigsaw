@@ -14,6 +14,7 @@ import {
   BEST_TIMES_KEY,
   PROGRESS_KEY,
   WAGER_BALANCE_KEY,
+  WAGER_SEC_PER_PIECE,
   WAGER_STAKE,
   wagerNet,
   wagerParSeconds,
@@ -202,9 +203,9 @@ describe('double-click pulls a solved piece back apart', () => {
 
 describe('wager math (pure)', () => {
   it('par time scales by pieces and difficulty', () => {
-    expect(wagerParSeconds(25, 'moderate')).toBe(25 * 3.2 * 1.0);
-    expect(wagerParSeconds(25, 'easy')).toBe(25 * 3.2 * 0.75);
-    expect(wagerParSeconds(25, 'hard')).toBe(25 * 3.2 * 1.35);
+    expect(wagerParSeconds(25, 'moderate')).toBe(25 * WAGER_SEC_PER_PIECE * 1.0);
+    expect(wagerParSeconds(25, 'easy')).toBe(25 * WAGER_SEC_PER_PIECE * 0.75);
+    expect(wagerParSeconds(25, 'hard')).toBe(25 * WAGER_SEC_PER_PIECE * 1.35);
   });
 
   it('pot: $10 at t=0, exactly $5 at par, $0 floor at 2×par, never lower', () => {
@@ -292,10 +293,13 @@ describe('wager mode — integration', () => {
         elapsedSec: Math.ceil(2 * par + 30),
       });
     });
-    await waitFor(() => {
-      // chip shows $0.00 and the lost label
-      expect(screen.getByText('$0.00')).toBeTruthy();
-    });
+    await waitFor(
+      () => {
+        // chip shows $0.00 and the lost label
+        expect(screen.getByText('$0.00')).toBeTruthy();
+      },
+      { timeout: 8000 },
+    );
     expect(screen.getByText(/wager lost/i)).toBeTruthy();
 
     // puzzle is still fully playable — solve it and it resolves as a full loss

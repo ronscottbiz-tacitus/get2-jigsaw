@@ -150,6 +150,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   // DOM refs
   private canvasEl: HTMLCanvasElement | null = null;
   private videoEl: HTMLVideoElement | null = null;
+  private videoEverReady = false;
   private ghostVideoEl: HTMLVideoElement | null = null;
   private stageEl: HTMLDivElement | null = null;
   private hostEl: HTMLDivElement | null = null;
@@ -160,6 +161,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private timer?: number;
   private saveTimer?: number;
   private wagerTimer?: number;
+  private wagerBustPlayed = false;
   private hintTO?: number;
   private pulseTO?: number;
   private statsTO?: number;
@@ -334,7 +336,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         Math.round((this.state.wagerBalance + net) * 100) / 100;
       setWagerBalance(newBalance);
       if (net >= 0) sound.wagerWin();
-      else sound.wagerLoss();
+      else if (!this.wagerBustPlayed) sound.wagerLoss();
       this.setState({
         wagerBalance: newBalance,
         wagerActive: false,
@@ -518,15 +520,24 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const now = performance.now();
     if (this.lastCanvasDraw && now - this.lastCanvasDraw < 55) return;
     this.lastCanvasDraw = now;
+
+    const videoReady = !!this.videoEl && this.videoEl.readyState >= 2;
+    if (videoReady) this.videoEverReady = true;
+    // A momentary stall (e.g. right at the native loop point) briefly drops
+    // readyState even mid-playback. Once the clip has shown a real frame at
+    // least once, just hold that last frame through the stall instead of
+    // clearing the canvas and flashing every piece to the placeholder
+    // gradient below — the flash is far more visible than a one-frame hold.
+    if (!videoReady && this.videoEverReady) return;
+
     const ctx = this.canvasEl.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, STAGE_W, STAGE_H);
 
-    const videoReady = !!this.videoEl && this.videoEl.readyState >= 2;
     // With a real clip: crop the board region out of the video, mapped per
-    // piece. Without one (asset not present yet): fill each piece with an
-    // animated procedural gradient so Live is still visibly "moving" and fully
-    // playable. Drop a real .mp4 in and this branch is never taken.
+    // piece. Without one (asset not present yet, or not ready yet at cold
+    // start): fill each piece with an animated procedural gradient so Live is
+    // still visibly "moving" and fully playable.
     let vw = BOARD_W;
     let vh = BOARD_H;
     let k = 1;
@@ -649,8 +660,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
   };
 
-  private selectVideo = (src: string) => {
+    private selectVideo = (src: string) => {
     this.setState({ videoSrc: src });
+    this.videoEverReady = false;
     if (this.videoEl) {
       this.videoEl.pause();
       this.videoEl.src = src;
@@ -719,12 +731,11 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       this.stopWagerTicker();
     }
 
-    this.introPulseTO = window.setTimeout(() => {
+        this.introPulseTO = window.setTimeout(() => {
       if (this.state.introPhase === 'hold') this.setState({ introPulse: true });
     }, 4500);
-    this.introFallbackTO = window.setTimeout(() => {
-      if (this.state.introPhase === 'hold') this.beginBreakApart();
-    }, 9000);
+    // Deliberately no auto-scatter fallback here — the puzzle now stays
+    // whole in 'hold' until the user actually clicks it (see `deselect`).
   };
 
   private beginBreakApart = () => {
@@ -814,6 +825,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
   private startWagerTicker(parSec: number) {
     this.stopWagerTicker();
+    this.wagerBustPlayed = false;
     const ms = wagerTickIntervalMs(parSec);
     if (ms <= 0) return;
     this.wagerTimer = window.setInterval(() => {
@@ -821,7 +833,18 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         if (!s.wagerActive) return null;
         const elapsed = (Date.now() - s.startTime) / 1000;
         const pot = wagerPot(elapsed, s.wagerParSec);
-        sound.wagerTick(wagerUrgency(pot));
+        if (pot <= 0) {
+          // Pot's bottomed out — play the bust flourish once and stop the
+          // ticking instead of continuing to tick at max intensity for
+          // however long it takes to actually solve the puzzle.
+          if (!this.wagerBustPlayed) {
+            this.wagerBustPlayed = true;
+            sound.wagerLoss();
+          }
+          this.stopWagerTicker();
+        } else {
+          sound.wagerTick(wagerUrgency(pot));
+        }
         return { wagerElapsedSec: elapsed };
       });
     }, ms);
@@ -1274,7 +1297,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                   top: BOARD_OFFSET_Y,
                   width: BOARD_W,
                   height: BOARD_H,
-                  border: `1px dashed ${activePreset.outline}`,
+                  border: `1px ${activePreset.outlineStyle ?? 'dashed'} ${activePreset.outline}`,
                   borderRadius: 4,
                   pointerEvents: 'none',
                 }}
