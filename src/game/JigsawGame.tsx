@@ -1149,7 +1149,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const isImageMode = !isVideoMode;
     const activePreset =
       BG_PRESETS.find((b) => b.hex === s.bgColor) || BG_PRESETS[0];
-    const pageBg = bgCssFor(activePreset.hex, 260);
+    const pageBg = activePreset.css ?? bgCssFor(activePreset.hex, 260);
     const isWon = s.pieces.length > 0 && s.solvedCount === s.pieces.length;
 
     const difficultyLabel = {
