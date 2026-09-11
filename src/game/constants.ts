@@ -41,14 +41,37 @@ export const WELCOMED_KEY = 'jigsaw_welcomed_v1';
 export interface BgPreset {
   hex: string;
   outline: string;
+  /** Border style for the board outline. Defaults to 'dashed'. */
+  outlineStyle?: 'dashed' | 'dotted';
+  /** Full CSS `background` value overriding the tiled-texture default
+   * (`bgCssFor`). Use for presets that aren't a flat colour + metal grain. */
+  css?: string;
 }
+
+/** Dark, cool-toned faux marble — layered gradients only, no image asset, so
+ * there's nothing to license and it scales to any board size. Two thin
+ * "vein" directions plus a soft highlight in the brand blue. */
+const MARBLE_CSS = [
+  'radial-gradient(120% 90% at 15% 20%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 45%)',
+  'radial-gradient(100% 70% at 80% 75%, rgba(0,82,255,0.12) 0%, rgba(0,82,255,0) 50%)',
+  'repeating-linear-gradient(115deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, rgba(255,255,255,0) 3px, rgba(255,255,255,0) 14px)',
+  'repeating-linear-gradient(25deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 2px, transparent 22px)',
+  'linear-gradient(160deg, #2b2c31 0%, #1c1d21 55%, #131417 100%)',
+].join(', ');
+
 export const BG_PRESETS: BgPreset[] = [
   { hex: '#333333', outline: 'rgba(255,255,255,0.28)' },
   { hex: '#5A7A94', outline: 'rgba(0,0,0,0.35)' },
   { hex: '#8B4A2E', outline: 'rgba(255,255,255,0.3)' },
   { hex: '#D8C9A8', outline: 'rgba(0,0,0,0.3)' },
+  { hex: '#1c1d21', outline: 'rgba(255,255,255,0.3)', css: MARBLE_CSS },
+  {
+    hex: '#000000',
+    outline: '#0052FF', // matches ACCENT below
+    outlineStyle: 'dotted',
+    css: '#000000',
+  },
 ];
-
 // Placeholder is an SVG; a real raster (…grain.png) with the same stem can
 // replace it — update this constant to match.
 export const TEXTURE_URL = '/uploads/textures/brushed-metal-grain.png.svg';
@@ -68,8 +91,10 @@ export const GAME_ACCENT = '#3fae7d'; // in-app control accent (flexible layer)
  *  Fake balance only; localStorage, no backend.
  * ------------------------------------------------------------------------- */
 
-/** Base "par" pace: seconds of allowance per piece before difficulty scaling. */
-export const WAGER_SEC_PER_PIECE = 3.2;
+/** Base "par" pace: seconds of allowance per piece before difficulty scaling.
+ * 11.2 = 3.5x the original 3.2s/piece — first pass at "way too hard"; retune
+ * once we have a feel for real solve times. */
+export const WAGER_SEC_PER_PIECE = 11.2;
 
 /** Difficulty multiplier on the par time — harder tiers get more slack. */
 export const WAGER_DIFFICULTY_MULTIPLIER: Record<Difficulty, number> = {
