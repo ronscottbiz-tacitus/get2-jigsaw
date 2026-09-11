@@ -36,8 +36,8 @@ export const PROGRESS_KEY = 'jigsaw_progress_v1';
 export const WELCOMED_KEY = 'jigsaw_welcomed_v1';
 
 /** Board background swatches, each paired with the board-outline colour that
- * reads against it. `hex` is the flat fill; a brushed-metal texture is tiled
- * over it at render time. */
+ * reads against it. `hex` is the flat fill/identity colour; `css`, when set,
+ * is the actual rendered background (a real marble photo, in this case). */
 export interface BgPreset {
   hex: string;
   outline: string;
@@ -48,23 +48,31 @@ export interface BgPreset {
   css?: string;
 }
 
-/** Dark, cool-toned faux marble — layered gradients only, no image asset, so
- * there's nothing to license and it scales to any board size. Two thin
- * "vein" directions plus a soft highlight in the brand blue. */
-const MARBLE_CSS = [
-  'radial-gradient(120% 90% at 15% 20%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 45%)',
-  'radial-gradient(100% 70% at 80% 75%, rgba(0,82,255,0.12) 0%, rgba(0,82,255,0) 50%)',
-  'repeating-linear-gradient(115deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, rgba(255,255,255,0) 3px, rgba(255,255,255,0) 14px)',
-  'repeating-linear-gradient(25deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 2px, transparent 22px)',
-  'linear-gradient(160deg, #2b2c31 0%, #1c1d21 55%, #131417 100%)',
-].join(', ');
-
+/** Each non-black preset's `css` points at a real marble/stone photo in
+ * public/uploads/textures/; `hex` is kept as a flat-color fallback if the
+ * image fails to load, and as the stored/compared identity for "which
+ * preset is selected." */
 export const BG_PRESETS: BgPreset[] = [
-  { hex: '#333333', outline: 'rgba(255,255,255,0.28)' },
-  { hex: '#5A7A94', outline: 'rgba(0,0,0,0.35)' },
-  { hex: '#8B4A2E', outline: 'rgba(255,255,255,0.3)' },
-  { hex: '#D8C9A8', outline: 'rgba(0,0,0,0.3)' },
-  { hex: '#1c1d21', outline: 'rgba(255,255,255,0.3)', css: MARBLE_CSS },
+  {
+    hex: '#333333',
+    outline: 'rgba(255,255,255,0.28)',
+    css: "url('/uploads/textures/marble-charcoal.jpg') center/cover, #333333",
+  },
+  {
+    hex: '#5A7A94',
+    outline: 'rgba(0,0,0,0.35)',
+    css: "url('/uploads/textures/marble-blue.jpg') center/cover, #5A7A94",
+  },
+  {
+    hex: '#8B4A2E',
+    outline: 'rgba(255,255,255,0.3)',
+    css: "url('/uploads/textures/marble-tan.jpg') center/cover, #8B4A2E",
+  },
+  {
+    hex: '#D8C9A8',
+    outline: 'rgba(0,0,0,0.3)',
+    css: "url('/uploads/textures/marble-white.jpg') center/cover, #D8C9A8",
+  },
   {
     hex: '#000000',
     outline: '#0052FF', // matches ACCENT below
