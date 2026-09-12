@@ -1,17 +1,21 @@
 /**
  * Marketing hero.
  *
- * A real, playing `<video>` (jellyfish.mp4) is the full-bleed backdrop. Over it,
- * eleven puzzle pieces run one continuous loop: they start solved in their own
- * holes → scatter out to the opposite side of the frame (staggered) → hold →
- * fly all the way back across, rotating home through 90° steps with a spring
- * bounce (Moderate's `steppedAngle` curve) → re-solved → loop. Because every
- * piece is at its hole, rotation 0, scale 1 at both ends of the loop, the wrap
- * is seamless — no jump. See `heroAnim.ts` for the timeline.
+ * A real, playing `<video>` (murmuration.mp4) is the full-bleed backdrop. Over
+ * it, the full 48-piece grid ("6 rows × 8 cols" — the real game's default
+ * preset, `generateGeometry(6, 8, 'moderate')`) runs one continuous loop: they
+ * start solved in their own holes → scatter out to the opposite side of the
+ * frame (staggered) → hold → fly all the way back across, rotating home
+ * through 90° steps with a spring bounce → re-solved → a centred block of
+ * pieces spins through one extra, more exaggerated 360° flourish → loop.
+ * Because every piece is at its hole, rotation a clean multiple of 360°, scale
+ * 1 at both ends of the loop, the wrap is seamless — no jump. See
+ * `heroAnim.ts` for the timeline; piece shapes/placement come from the same
+ * `generateGeometry` the real playable game uses, stretched to fill the hero.
  *
- * Every piece shows a *live* sliver of that same video, sampled from the current
- * frame and cropped to exactly where the piece lands, so a gathered piece
- * blends seamlessly into the backdrop. Rather than mount eleven `<video>`
+ * Every piece shows a *live* sliver of that same video, sampled from the
+ * current frame and cropped to exactly where the piece lands, so a gathered
+ * piece blends seamlessly into the backdrop. Rather than mount 48 `<video>`
  * elements (which would drift out of sync), the clip is decoded once in the
  * backdrop `<video>` and every piece is drawn from it onto a single `<canvas>`
  * each frame — the technique the in-game Live mode uses. One decoder, all
@@ -21,20 +25,21 @@
  * all times.
  */
 import { Component } from 'react';
-import { HERO_POSTER_SRC, HERO_VIDEO_SRC } from '../../content/library';
+import { MURMURATION_POSTER_SRC, MURMURATION_VIDEO_SRC } from '../../content/library';
 import { ACCENT } from '../../game/constants';
 import {
-  getHeroPieceDefs,
-  heroPieceAt,
-  heroSlotVisibleAt,
-  HERO_COPY_AT,
-  HERO_HOLD1_END,
-  HERO_SCATTER_END,
-  HERO_GATHER_START,
-  HERO_GATHER_END,
-  HERO_STEP_MS,
-  HERO_TOTAL,
-  type HeroPieceDef,
+  getHeroGridDefs,
+  heroGridPieceAt,
+  heroGridSlotVisibleAt,
+  HERO_GRID_HOLD1_END,
+  HERO_GRID_SCATTER_END,
+  HERO_GRID_GATHER_START,
+  HERO_GRID_GATHER_END,
+  HERO_GRID_FLOURISH_START,
+  HERO_GRID_FLOURISH_END,
+  HERO_GRID_STEP_MS,
+  HERO_GRID_TOTAL,
+  type HeroGridPieceDef,
 } from './heroAnim';
 
 interface Props {
@@ -44,7 +49,6 @@ interface State {
   heroW: number;
   heroH: number;
   elapsed: number;
-  copyRevealed: boolean;
 }
 
 const GESTURES = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
@@ -59,7 +63,7 @@ export class Hero extends Component<Props, State> {
   private resizeObs?: ResizeObserver;
   private pathCache = new Map<string, Path2D>();
 
-  state: State = { heroW: 1440, heroH: 810, elapsed: 0, copyRevealed: false };
+  state: State = { heroW: 1440, heroH: 810, elapsed: 0 };
 
   componentDidMount() {
     this.raf = requestAnimationFrame(this.tick);
@@ -75,16 +79,18 @@ export class Hero extends Component<Props, State> {
     // timing verification (tree-shaken from production builds).
     if (import.meta.env.DEV) {
       (window as unknown as { __heroDebug?: unknown }).__heroDebug = {
-        defs: () => getHeroPieceDefs(this.state.heroW, this.state.heroH),
-        pieceAt: heroPieceAt,
-        slotVisibleAt: heroSlotVisibleAt,
+        defs: () => getHeroGridDefs(this.state.heroW, this.state.heroH),
+        pieceAt: heroGridPieceAt,
+        slotVisibleAt: heroGridSlotVisibleAt,
         T: {
-          HERO_HOLD1_END,
-          HERO_SCATTER_END,
-          HERO_GATHER_START,
-          HERO_GATHER_END,
-          HERO_STEP_MS,
-          HERO_TOTAL,
+          HERO_GRID_HOLD1_END,
+          HERO_GRID_SCATTER_END,
+          HERO_GRID_GATHER_START,
+          HERO_GRID_GATHER_END,
+          HERO_GRID_FLOURISH_START,
+          HERO_GRID_FLOURISH_END,
+          HERO_GRID_STEP_MS,
+          HERO_GRID_TOTAL,
         },
       };
     }
@@ -120,7 +126,7 @@ export class Hero extends Component<Props, State> {
       el.muted = true;
       el.loop = true;
       el.playsInline = true;
-      if (!el.src) el.src = HERO_VIDEO_SRC;
+      if (!el.src) el.src = MURMURATION_VIDEO_SRC;
       el.play().catch(() => {});
     }
   };
@@ -148,11 +154,8 @@ export class Hero extends Component<Props, State> {
 
   private tick = (now: number) => {
     if (!this.start) this.start = now;
-    const elapsed = (now - this.start) % HERO_TOTAL;
-    const patch: Partial<State> = { elapsed };
-    if (!this.state.copyRevealed && elapsed >= HERO_COPY_AT)
-      patch.copyRevealed = true;
-    this.setState(patch as State);
+    const elapsed = (now - this.start) % HERO_GRID_TOTAL;
+    this.setState({ elapsed });
     this.drawPieces(elapsed);
     this.raf = requestAnimationFrame(this.tick);
   };
@@ -188,10 +191,10 @@ export class Hero extends Component<Props, State> {
       offY = (v.videoHeight * coverScale - heroH) / 2;
     }
 
-    const defs = getHeroPieceDefs(heroW, heroH);
+    const defs = getHeroGridDefs(heroW, heroH);
     const M = 160; // generous margin for rotation/scale bbox growth
     for (const def of defs) {
-      const p = heroPieceAt(def, elapsed);
+      const p = heroGridPieceAt(def, elapsed);
       if (!p.visible) continue;
       // skip pieces flung fully off the canvas (scattered / mid-flight)
       if (
@@ -244,7 +247,7 @@ export class Hero extends Component<Props, State> {
 
   render() {
     const { heroW, heroH, elapsed } = this.state;
-    const defs = getHeroPieceDefs(heroW, heroH);
+    const defs = getHeroGridDefs(heroW, heroH);
 
     return (
       <section
@@ -263,8 +266,8 @@ export class Hero extends Component<Props, State> {
         {/* live backdrop */}
         <video
           ref={this.setBgVideoRef}
-          src={HERO_VIDEO_SRC}
-          poster={HERO_POSTER_SRC}
+          src={MURMURATION_VIDEO_SRC}
+          poster={MURMURATION_POSTER_SRC}
           muted
           loop
           autoPlay
@@ -303,7 +306,7 @@ export class Hero extends Component<Props, State> {
             <HeroSlot
               key={`s${i}`}
               def={def}
-              visible={heroSlotVisibleAt(def, elapsed)}
+              visible={heroGridSlotVisibleAt(def, elapsed)}
             />
           ))}
           <canvas
@@ -402,7 +405,7 @@ export class Hero extends Component<Props, State> {
   }
 }
 
-function HeroSlot({ def, visible }: { def: HeroPieceDef; visible: boolean }) {
+function HeroSlot({ def, visible }: { def: HeroGridPieceDef; visible: boolean }) {
   if (!visible) return null;
   return (
     <>

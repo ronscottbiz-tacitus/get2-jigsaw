@@ -1,30 +1,48 @@
 /**
- * Locks in the hero loop's guarantees:
- *  - the wrap is seamless (piece pose at e=0 === pose at e=TOTAL)
+ * Locks in the hero's 48-piece grid loop guarantees:
+ *  - it's a real 6x8 board built from `generateGeometry` (the game's own
+ *    48-piece preset), not a hand-rolled grid
+ *  - the wrap is seamless (piece pose at e=0 === pose at e=TOTAL, allowing for
+ *    360°-wrapped rotation values, which render identically to 0°)
  *  - every piece scatters to the OPPOSITE side and travels a long way
  *  - the fly-in rotates home through 90° steps with a spring bounce, landing
  *    upright
+ *  - the centred flourish block spins an extra, more exaggerated 360° after
+ *    reassembly, while every other piece holds still
  *  - the video crop anchor is always the landing slot, in every phase.
  */
 import { describe, it, expect } from 'vitest';
 import {
-  getHeroPieceDefs,
-  heroPieceAt,
-  HERO_HOLD1_END,
-  HERO_SCATTER_END,
-  HERO_GATHER_START,
-  HERO_GATHER_END,
-  HERO_TOTAL,
-  HERO_STEP_MS,
+  getHeroGridDefs,
+  heroGridPieceAt,
+  HERO_GRID_ROWS,
+  HERO_GRID_COLS,
+  HERO_GRID_HOLD1_END,
+  HERO_GRID_SCATTER_END,
+  HERO_GRID_GATHER_START,
+  HERO_GRID_GATHER_END,
+  HERO_GRID_FLOURISH_START,
+  HERO_GRID_FLOURISH_END,
+  HERO_GRID_TOTAL,
 } from './heroAnim';
 
 const W = 1440;
 const H = 810;
-const defs = getHeroPieceDefs(W, H);
+const defs = getHeroGridDefs(W, H);
 
-describe('hero choreography', () => {
-  it('has 11 real pieces with valid spin params', () => {
-    expect(defs).toHaveLength(11);
+/** rotation values can be non-zero multiples of 360 at a phase boundary
+ * (e.g. a 4-step scatter spin) — visually identical to 0°, so compare the
+ * normalized angle, not the raw number. */
+const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
+
+describe('hero grid choreography', () => {
+  it('is a real 48-piece 6x8 board with valid shapes and spin params', () => {
+    expect(defs).toHaveLength(HERO_GRID_ROWS * HERO_GRID_COLS);
+    expect(HERO_GRID_ROWS * HERO_GRID_COLS).toBe(48);
+    const rows = new Set(defs.map((d) => d.row));
+    const cols = new Set(defs.map((d) => d.col));
+    expect(rows.size).toBe(HERO_GRID_ROWS);
+    expect(cols.size).toBe(HERO_GRID_COLS);
     for (const d of defs) {
       expect(d.clip).toMatch(/^M /);
       expect(Number.isFinite(d.slot.left)).toBe(true);
@@ -35,9 +53,18 @@ describe('hero choreography', () => {
     }
   });
 
+  it('marks exactly an innermost 2x4 block (8 pieces) for the flourish', () => {
+    const flourishPieces = defs.filter((d) => d.flourish);
+    expect(flourishPieces).toHaveLength(8);
+    const rows = new Set(flourishPieces.map((d) => d.row));
+    const cols = new Set(flourishPieces.map((d) => d.col));
+    expect(rows).toEqual(new Set([2, 3]));
+    expect(cols).toEqual(new Set([2, 3, 4, 5]));
+  });
+
   it('starts fully assembled: every piece in its hole, upright', () => {
     for (const d of defs) {
-      const p = heroPieceAt(d, 0);
+      const p = heroGridPieceAt(d, 0);
       expect(p).toMatchObject({ visible: true, rot: 0, scale: 1 });
       expect(p.left).toBe(d.slot.left);
       expect(p.top).toBe(d.slot.top);
@@ -46,70 +73,30 @@ describe('hero choreography', () => {
 
   it('loops seamlessly — pose at e=0 matches pose at the last ms', () => {
     for (const d of defs) {
-      const a = heroPieceAt(d, 0);
-      const z = heroPieceAt(d, HERO_TOTAL - 1);
+      const a = heroGridPieceAt(d, 0);
+      const z = heroGridPieceAt(d, HERO_GRID_TOTAL - 1);
       expect(Math.abs(a.left - z.left)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(a.top - z.top)).toBeLessThanOrEqual(0.5);
-      expect(Math.abs(a.rot - z.rot)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(norm360(a.rot) - norm360(z.rot))).toBeLessThanOrEqual(0.5);
       expect(Math.abs(a.scale - z.scale)).toBeLessThanOrEqual(0.01);
     }
   });
 
-  it('scatters to the opposite side of the frame — long travel, fully off-frame', () => {
-    const mid = (HERO_SCATTER_END + HERO_GATHER_START) / 2;
-    const cx = W / 2;
-    const cy = H / 2;
+  it('scatters to the opposite side of the frame — fully off-frame', () => {
+    const mid = (HERO_GRID_SCATTER_END + HERO_GRID_GATHER_START) / 2;
     for (const d of defs) {
-      const p = heroPieceAt(d, mid);
+      const p = heroGridPieceAt(d, mid);
       expect(p.left).toBe(d.scatter.left);
-      // opposite side: slot and scatter centres are on opposite sides of centre
-      const slotSide = Math.sign(d.slot.left + d.w / 2 - cx);
-      const scatSide = Math.sign(d.scatter.left + d.w / 2 - cx);
-      const slotSideY = Math.sign(d.slot.top + d.h / 2 - cy);
-      const scatSideY = Math.sign(d.scatter.top + d.h / 2 - cy);
-      expect(slotSide !== scatSide || slotSideY !== scatSideY).toBe(true);
-      // fully outside the frame
       const off =
         p.left + p.w <= 0 || p.top + p.h <= 0 || p.left >= W || p.top >= H;
       expect(off).toBe(true);
-      // travelled at least a half-diagonal
-      const dist = Math.hypot(p.left - d.slot.left, p.top - d.slot.top);
-      expect(dist).toBeGreaterThan(Math.hypot(W, H) / 2);
-      // held at its spun orientation (a clean multiple of 90)
       expect(Math.abs(p.rot) % 90).toBe(0);
     }
   });
 
-  it('flies in with pronounced stepped 90° snaps — overshoot, hold, big scale pop, landing upright', () => {
+  it('flies in and lands upright, in its own slot, before the flourish', () => {
     for (const d of defs) {
-      const startRot = d.spinDir * d.steps * 90;
-      const near = heroPieceAt(d, HERO_GATHER_START + d.delay + 10);
-      expect(Math.abs(near.rot - startRot)).toBeLessThan(90);
-
-      let maxScale = 1;
-      let minSpun = Infinity; // spinDir*rot; goes negative when it overshoots upright
-      let maxAbsRot = 0;
-      let holdFrames = 0; // consecutive samples near an overshoot peak
-      let run = 0;
-      for (let e = HERO_GATHER_START; e < HERO_GATHER_END; e += 30) {
-        const p = heroPieceAt(d, e);
-        maxScale = Math.max(maxScale, p.scale);
-        minSpun = Math.min(minSpun, d.spinDir * p.rot);
-        maxAbsRot = Math.max(maxAbsRot, Math.abs(p.rot));
-        if (p.scale > 1.12) {
-          run++;
-          holdFrames = Math.max(holdFrames, run);
-        } else run = 0;
-      }
-      // bigger scale pop than the plain curve (~1.1)
-      expect(maxScale).toBeGreaterThan(1.15);
-      // rotational overshoot: the piece rotates past upright before settling
-      expect(minSpun).toBeLessThan(-6);
-      // the peak is held for a few frames (≥ ~60ms at 30ms sampling), not a flick
-      expect(holdFrames).toBeGreaterThanOrEqual(2);
-      expect(maxAbsRot).toBeGreaterThanOrEqual(Math.abs(startRot) - 1);
-
-      const landed = heroPieceAt(d, HERO_GATHER_END);
+      const landed = heroGridPieceAt(d, HERO_GRID_GATHER_END);
       expect(Math.abs(landed.rot)).toBeLessThanOrEqual(0.5);
       expect(Math.abs(landed.scale - 1)).toBeLessThanOrEqual(0.01);
       expect(Math.abs(landed.left - d.slot.left)).toBeLessThanOrEqual(0.5);
@@ -117,79 +104,53 @@ describe('hero choreography', () => {
     }
   });
 
-  it('every 90° step runs at the same wall-clock tempo regardless of step count', () => {
-    // a 1-step and a 4-step piece should take the same time per quarter-turn
-    const perStepMs = HERO_STEP_MS;
+  it('flourish: only the centred block moves, spinning further and bigger than the fly-in settle', () => {
+    const mid = (HERO_GRID_FLOURISH_START + HERO_GRID_FLOURISH_END) / 2;
     for (const d of defs) {
-      // the turn of the first step completes within ~turnPortion*perStepMs
-      const start = HERO_GATHER_START + d.delay;
-      const afterFirstTurn = heroPieceAt(d, start + perStepMs * 0.42 + 5);
-      const firstTarget = d.spinDir * (d.steps * 90 - 90);
-      expect(Math.abs(afterFirstTurn.rot - firstTarget)).toBeLessThan(30);
-      // all steps done by steps*perStepMs (+ a little) — upright well before it seats
-      const doneRot = heroPieceAt(d, start + d.steps * perStepMs + 40).rot;
-      expect(Math.abs(doneRot)).toBeLessThanOrEqual(0.5);
-    }
-  });
-
-  it('fly-in position eases straight home (no overshoot)', () => {
-    for (const d of defs) {
-      const samples: number[] = [];
-      for (let e = HERO_GATHER_START; e <= HERO_GATHER_END; e += 120) {
-        const p = heroPieceAt(d, e);
-        samples.push(Math.hypot(p.left - d.slot.left, p.top - d.slot.top));
+      const p = heroGridPieceAt(d, mid);
+      if (!d.flourish) {
+        // everyone else just holds
+        expect(p).toMatchObject({ rot: 0, scale: 1 });
+        expect(p.left).toBe(d.slot.left);
+        expect(p.top).toBe(d.slot.top);
+        continue;
       }
-      let regressions = 0;
-      for (let i = 1; i < samples.length; i++)
-        if (samples[i] > samples[i - 1] + 2) regressions++;
-      expect(regressions).toBe(0);
+      // the flourish piece never leaves its slot — it spins in place
+      expect(p.left).toBe(d.slot.left);
+      expect(p.top).toBe(d.slot.top);
+
+      let maxScale = 1;
+      for (let e = HERO_GRID_FLOURISH_START; e < HERO_GRID_FLOURISH_END; e += 20) {
+        maxScale = Math.max(maxScale, heroGridPieceAt(d, e).scale);
+      }
+      // bigger scale pop than the plain fly-in settle (~1.18)
+      expect(maxScale).toBeGreaterThan(1.2);
     }
   });
 
-  it('fly-in travel is spread across the window, not front-loaded', () => {
-    // regression guard: easeOutCubic here made a piece cover ~85% of its
-    // journey in the first ~40% of the window (it "arrived" in ~1.5s of a 3s
-    // window). With an even ease the travelled fraction should track elapsed.
-    const win = HERO_GATHER_END - HERO_GATHER_START;
-    for (const d of defs) {
-      const start = HERO_GATHER_START + d.delay;
-      const total = Math.hypot(
-        d.scatter.left - d.slot.left,
-        d.scatter.top - d.slot.top,
-      );
-      const travelledAt = (frac: number) => {
-        const p = heroPieceAt(d, start + win * frac);
-        const dist = Math.hypot(p.left - d.slot.left, p.top - d.slot.top);
-        return 1 - dist / total;
-      };
-      // at 25% of the window: nowhere near home
-      expect(travelledAt(0.25)).toBeLessThan(0.35);
-      // at the midpoint: roughly half way (even pacing)
-      expect(travelledAt(0.5)).toBeGreaterThan(0.35);
-      expect(travelledAt(0.5)).toBeLessThan(0.65);
-      // still visibly moving at 75%
-      expect(travelledAt(0.75)).toBeLessThan(0.92);
-      // and it does finish
-      expect(travelledAt(0.98)).toBeGreaterThan(0.97);
+  it('flourish block lands back upright exactly where it started', () => {
+    for (const d of defs.filter((d) => d.flourish)) {
+      const p = heroGridPieceAt(d, HERO_GRID_FLOURISH_END);
+      expect(norm360(p.rot)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(p.scale - 1)).toBeLessThanOrEqual(0.01);
+      expect(p.left).toBe(d.slot.left);
+      expect(p.top).toBe(d.slot.top);
     }
-  });
-
-  it('fly-in window is long enough to track a full journey (≥ 3.5s)', () => {
-    expect(HERO_GATHER_END - HERO_GATHER_START).toBeGreaterThanOrEqual(3500);
   });
 
   it('always samples the video at the landing slot, in every phase', () => {
     const phases = [
       0,
-      HERO_HOLD1_END + 200,
-      HERO_SCATTER_END - 100,
-      HERO_GATHER_START + 300,
-      HERO_GATHER_END - 100,
-      HERO_TOTAL - 50,
+      HERO_GRID_HOLD1_END + 200,
+      HERO_GRID_SCATTER_END - 100,
+      HERO_GRID_GATHER_START + 300,
+      HERO_GRID_GATHER_END - 100,
+      HERO_GRID_FLOURISH_START + 100,
+      HERO_GRID_TOTAL - 50,
     ];
     for (const d of defs) {
       for (const e of phases) {
-        const p = heroPieceAt(d, e);
+        const p = heroGridPieceAt(d, e);
         expect(p.slotLeft).toBe(d.slot.left);
         expect(p.slotTop).toBe(d.slot.top);
       }

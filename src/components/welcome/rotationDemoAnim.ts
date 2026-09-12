@@ -1,178 +1,164 @@
 /**
- * Pure maths for the "Rotation changes everything." demo: a contiguous 2x2 block
- * lifted out of a real 5x5 Mountain Valley grid. Left column demonstrates
- * Moderate (stepped 90° with bounce), right column demonstrates Hard (smooth
- * free-rotation). Both resolve to upright and interlock into one solved quad,
- * then everything gathers back home before the loop repeats.
+ * Pure maths for "Rotation changes everything." — section 2 of the marketing
+ * page. This is the effect that used to live in the hero at the top of the
+ * page: a real, playing `<video>` (jellyfish.mp4) as the full-bleed backdrop,
+ * with eleven puzzle pieces running one continuous loop.
  *
- * Ported from the prototype's `getMtnDemoDefs`, `rotDemoSteppedAngle`, and the
- * `mtnDemo` block of `renderVals`. The block shares one hEdge/vEdge table (same
- * rule as the real engine) so the four focal pieces genuinely interlock.
+ * Every piece starts **solved** in its own hole, showing the slice of the
+ * backdrop video that belongs there. The loop is:
+ *
+ *   assembled hold
+ *   → scatter outward to the OPPOSITE side of the frame (staggered, easeInOutCubic
+ *     over ~2.4s so the outward motion is deliberate, not a blur)
+ *   → scattered hold
+ *   → fly back in across the whole frame, rotating home through 90° steps — each
+ *     step (fixed ~600ms) overshoots the target angle, holds at the peak, then
+ *     settles, with a ~1.18 scale pulse, so every quarter-turn reads as a beat
+ *     (`steppedAngle` with punchier options, shared with the hero grid's own
+ *     fly-in via `heroAnim.ts`)
+ *   → resolved hold
+ *   → (loop)
+ *
+ * A piece is at its slot, rotation 0, scale 1 at BOTH the end of the resolved
+ * hold and the start of the next assembled hold, so the wrap is seamless.
+ *
+ * The video crop each piece carries is always sampled at `slot` (its landing
+ * hole), never its current position, so a landed piece blends seamlessly into
+ * the backdrop.
  */
 import { buildEdge, randEdgeParams } from '../../game/geometry';
-import { BLEED } from '../../game/constants';
-// `steppedAngle` (the Moderate stepped-90°-with-bounce curve) lives in heroAnim
-// so the hero fly-in and this demo share exactly one implementation.
-import { easeOutCubic, lerp, steppedAngle } from './heroAnim';
+import {
+  easeInOutCubic,
+  easeInOutSine,
+  lerp,
+  mulberry32,
+  scatterTarget,
+  steppedAngle,
+  type SteppedOpts,
+} from './heroAnim';
 
-export const MTN_HOLD_END = 1000;
-export const MTN_STAGE_END = 2600;
-export const MTN_MOD_ROTATE_END = 4000;
-export const MTN_HARD_ROTATE_END = 4200;
-export const MTN_RESOLVED_HOLD_END = 5600;
-export const MTN_GATHER_END = 7200;
-export const MTN_TOTAL = 7700;
+// ---- loop timeline (ms) ------------------------------------------------
+// The fly-in window is long AND its easing (easeInOutSine) is near-linear, so
+// the *perceived* travel time ≈ the window: a piece is visibly crossing the
+// frame for ~3.5s, not front-loading 90% of the distance into the first second.
+// Loop total ~11.3s.
+export const ROTATION_HOLD1_END = 1100; // assembled hold
+export const ROTATION_SCATTER_END = 3500; // pieces have reached the far side (2.4s out)
+export const ROTATION_GATHER_START = 4200; // begin flying home (brief scattered beat)
+export const ROTATION_GATHER_END = 9800; // pieces are back in their holes, upright (5.6s in)
+export const ROTATION_TOTAL = 11300; // + a resolved hold, then the loop wraps
 
-interface FocalDef {
-  id: string;
-  focal: true;
-  mode: 'mod' | 'hard';
-  home: { left: number; top: number };
-  staged: { left: number; top: number };
-  wrongAngle: number;
-  w: number;
-  h: number;
-  clip: string;
+/** Wall-clock per 90° step on the fly-in — constant regardless of how many
+ * quarter-turns a piece does, so every snap has the same tempo. */
+export const ROTATION_STEP_MS = 750;
+
+export const ROTATION_PIECE_COUNT = 11;
+
+/** Punchy snap options for the fly-in: fast turn, 14° overshoot held briefly at
+ * the peak, and a ~1.18 scale pop. */
+export const ROTATION_SNAP: SteppedOpts = {
+  turnPortion: 0.42,
+  overshoot: 0.155,
+  scalePulse: 0.18,
+  hold: 0.28,
+};
+
+export function rotationPieceShape(w: number, h: number): string {
+  const pad = 25;
+  const cellW = w - 2 * pad;
+  const cellH = h - 2 * pad;
+  const TL = { x: pad, y: pad };
+  const TR = { x: pad + cellW, y: pad };
+  const BR = { x: pad + cellW, y: pad + cellH };
+  const BL = { x: pad, y: pad + cellH };
+  const e1 = randEdgeParams();
+  const e2 = randEdgeParams();
+  const e3 = randEdgeParams();
+  const e4 = randEdgeParams();
+  const d =
+    buildEdge(TL, TR, false, e1.dir === 1, e1) +
+    buildEdge(TR, BR, false, e2.dir === 1, e2) +
+    buildEdge(BR, BL, false, e3.dir === 1, e3) +
+    buildEdge(BL, TL, false, e4.dir === 1, e4);
+  return `M ${TL.x} ${TL.y} ${d} Z`;
 }
-interface LooseDef {
-  id: string;
-  focal: false;
-  home: { left: number; top: number };
-  scatter: { left: number; top: number; rot: number };
+
+export interface RotationPieceDef {
+  slot: { left: number; top: number };
+  /** fly-in origin — the far side of the frame, opposite this piece's hole. */
+  scatter: { left: number; top: number };
+  /** quarter-turns (1–4) the piece rotates through on the way home. */
+  steps: number;
+  /** +1 / −1 — which way it spins. */
+  spinDir: number;
+  /** stagger (ms) applied to both the scatter-out and the fly-in legs. */
   delay: number;
   w: number;
   h: number;
   clip: string;
 }
-export type MtnDef = FocalDef | LooseDef;
-export interface MtnDefs {
-  boxW: number;
-  boxH: number;
-  pieces: MtnDef[];
+
+/**
+ * Slot centres as fractions of the rendered frame. Six are carried over from
+ * the original port; five more fill the gaps around the frame so the assembled
+ * state reads as a real jigsaw. All of them steer clear of the centre band
+ * where the "Rotation changes everything." heading sits (roughly
+ * fx 0.30–0.70, fy 0.34–0.66).
+ */
+const ROTATION_CENTERS = [
+  { fx: 0.187, fy: 0.166 },
+  { fx: 0.5, fy: 0.085 },
+  { fx: 0.78, fy: 0.24 },
+  { fx: 0.12, fy: 0.86 },
+  { fx: 0.93, fy: 0.629 },
+  { fx: 0.88, fy: 0.86 },
+  { fx: 0.055, fy: 0.4 },
+  { fx: 0.965, fy: 0.2 },
+  { fx: 0.35, fy: 0.9 },
+  { fx: 0.63, fy: 0.905 },
+  { fx: 0.315, fy: 0.055 },
+];
+
+let _shapes: string[] | null = null;
+function shapes(): string[] {
+  if (!_shapes)
+    _shapes = Array.from({ length: ROTATION_CENTERS.length }, () => rotationPieceShape(150, 140));
+  return _shapes;
 }
 
-let _defs: MtnDefs | null = null;
+export function getRotationPieceDefs(frameW: number, frameH: number): RotationPieceDef[] {
+  const w = 150;
+  const h = 140;
+  const shp = shapes();
+  const cx = frameW / 2;
+  const cy = frameH / 2;
+  const spread = Math.max(frameW, frameH);
 
-export function getMtnDefs(): MtnDefs {
-  if (_defs) return _defs;
-  const rows = 5;
-  const cols = 5;
-  const boxW = 600;
-  const boxH = 450;
-  const cellW = boxW / cols;
-  const cellH = boxH / rows;
-  const pad = Math.min(cellW, cellH) * 0.4;
-  const pieceW = cellW + 2 * pad;
-  const pieceH = cellH + 2 * pad;
-  const baseRow = 1;
-  const baseCol = 1;
-  const ENLARGE = 1.9;
-  const stagedCenterX = boxW * 0.5;
-  const stagedCenterY = boxH * 0.5;
-  const wrongAngleGrid: Record<string, number> = {
-    '0-0': 270,
-    '1-0': 180,
-    '0-1': -150,
-    '1-1': 200,
-  };
-  const focalMap: Record<
-    string,
-    { mode: 'mod' | 'hard'; wrongAngle: number; staged: { left: number; top: number } }
-  > = {};
-  ([
-    [0, 0],
-    [1, 0],
-    [0, 1],
-    [1, 1],
-  ] as const).forEach(([lr, lc]) => {
-    const r = baseRow + lr;
-    const c = baseCol + lc;
-    const centerOffsetX = (lc - 0.5) * cellW * ENLARGE;
-    const centerOffsetY = (lr - 0.5) * cellH * ENLARGE;
-    focalMap[`${r}-${c}`] = {
-      mode: lc === 0 ? 'mod' : 'hard',
-      wrongAngle: wrongAngleGrid[`${lr}-${lc}`],
-      staged: {
-        left: stagedCenterX + centerOffsetX - pieceW / 2,
-        top: stagedCenterY + centerOffsetY - pieceH / 2,
-      },
+  return ROTATION_CENTERS.map((c, i) => {
+    const slot = {
+      left: Math.round(c.fx * frameW - w / 2),
+      top: Math.round(c.fy * frameH - h / 2),
     };
+    const scx = slot.left + w / 2;
+    const scy = slot.top + h / 2;
+    const r = mulberry32(0x9e3779b9 ^ (i * 2654435761));
+
+    const scatter = scatterTarget(scx, scy, cx, cy, w, h, spread, r);
+
+    const steps = 1 + Math.floor(r() * 4); // 1..4 quarter-turns
+    const spinDir = r() < 0.5 ? 1 : -1;
+
+    // outer holes lead, inner holes trail — an "unzip from the edges" feel.
+    const d2c = Math.hypot(scx - cx, scy - cy);
+    const radiusNorm = Math.min(1, Math.max(0, d2c / (spread * 0.62)));
+    const delay = Math.round((1 - radiusNorm) * 220 + r() * 120); // ≤ ~340ms
+
+    return { slot, scatter, steps, spinDir, delay, w, h, clip: shp[i] };
   });
-
-  const hEdge = [];
-  for (let r = 0; r < rows - 1; r++) {
-    hEdge.push([] as ReturnType<typeof randEdgeParams>[]);
-    for (let c = 0; c < cols; c++) hEdge[r].push(randEdgeParams());
-  }
-  const vEdge = [];
-  for (let r = 0; r < rows; r++) {
-    vEdge.push([] as ReturnType<typeof randEdgeParams>[]);
-    for (let c = 0; c < cols - 1; c++) vEdge[r].push(randEdgeParams());
-  }
-
-  const defs: MtnDef[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const key = `${r}-${c}`;
-      const focal = focalMap[key];
-      const home = { left: c * cellW - pad, top: r * cellH - pad };
-      const TL = { x: pad, y: pad };
-      const TR = { x: pad + cellW, y: pad };
-      const BR = { x: pad + cellW, y: pad + cellH };
-      const BL = { x: pad, y: pad + cellH };
-      const topEdge = r > 0 ? hEdge[r - 1][c] : null;
-      const rightEdge = c < cols - 1 ? vEdge[r][c] : null;
-      const bottomEdge = r < rows - 1 ? hEdge[r][c] : null;
-      const leftEdge = c > 0 ? vEdge[r][c - 1] : null;
-      const topOutward = topEdge ? topEdge.dir === -1 : false;
-      const rightOutward = rightEdge ? rightEdge.dir === 1 : false;
-      const bottomOutward = bottomEdge ? bottomEdge.dir === 1 : false;
-      const leftOutward = leftEdge ? leftEdge.dir === -1 : false;
-      const d =
-        buildEdge(TL, TR, r === 0, topOutward, topEdge || {}) +
-        buildEdge(TR, BR, c === cols - 1, rightOutward, rightEdge || {}) +
-        buildEdge(BR, BL, r === rows - 1, bottomOutward, bottomEdge || {}) +
-        buildEdge(BL, TL, c === 0, leftOutward, leftEdge || {});
-      const clip = `M ${TL.x} ${TL.y} ${d} Z`;
-      if (focal) {
-        defs.push({
-          id: key,
-          focal: true,
-          mode: focal.mode,
-          home,
-          staged: focal.staged,
-          wrongAngle: focal.wrongAngle,
-          w: pieceW,
-          h: pieceH,
-          clip,
-        });
-      } else {
-        const cx = (c + 0.5) / cols - 0.5;
-        const cy = (r + 0.5) / rows - 0.5;
-        const mag = 1.5 + Math.random() * 0.5;
-        defs.push({
-          id: key,
-          focal: false,
-          home,
-          scatter: {
-            left: boxW / 2 + cx * boxW * mag - pieceW / 2,
-            top: boxH / 2 + cy * boxH * mag - pieceH / 2,
-            rot: (Math.random() - 0.5) * 260,
-          },
-          delay: (Math.abs(r - 2) + Math.abs(c - 2)) * 65,
-          w: pieceW,
-          h: pieceH,
-          clip,
-        });
-      }
-    }
-  }
-
-  _defs = { boxW, boxH, pieces: defs };
-  return _defs;
 }
 
-export interface MtnPieceState {
+export interface RotationPieceState {
+  visible: boolean;
   left: number;
   top: number;
   rot: number;
@@ -180,141 +166,94 @@ export interface MtnPieceState {
   w: number;
   h: number;
   clip: string;
-  shadow: string;
-  glow: number;
-  bgX: number;
-  bgY: number;
-  z: number;
+  /**
+   * The video region this piece reveals is always sampled at its landing slot —
+   * never its current position — so the sliver it carries matches exactly where
+   * it comes to rest (and blends seamlessly into the backdrop video there).
+   */
+  slotLeft: number;
+  slotTop: number;
 }
 
-export function mtnPieceAt(def: MtnDef, e: number): MtnPieceState {
-  const bgX = -def.home.left;
-  const bgY = -def.home.top;
-  const z = def.focal ? 500 : 1;
-  const base = { w: def.w, h: def.h, clip: def.clip, bgX, bgY, z };
-  const holdEnd = MTN_HOLD_END;
-  const stageEnd = MTN_STAGE_END;
-  const modEnd = MTN_MOD_ROTATE_END;
-  const hardEnd = MTN_HARD_ROTATE_END;
-  const resolvedHoldEnd = MTN_RESOLVED_HOLD_END;
-  const gatherEnd = MTN_GATHER_END;
-
-  if (e < holdEnd)
-    return { ...base, left: def.home.left, top: def.home.top, rot: 0, scale: BLEED, shadow: 'none', glow: 0 };
-  if (e >= gatherEnd)
-    return { ...base, left: def.home.left, top: def.home.top, rot: 0, scale: BLEED, shadow: 'none', glow: 0 };
-
-  if (!def.focal) {
-    if (e < stageEnd) {
-      const t = Math.min(
-        1,
-        Math.max(0, (e - holdEnd - def.delay) / (stageEnd - holdEnd - def.delay)),
-      );
-      const eased = easeOutCubic(t);
-      return {
-        ...base,
-        left: lerp(def.home.left, def.scatter.left, eased),
-        top: lerp(def.home.top, def.scatter.top, eased),
-        rot: lerp(0, def.scatter.rot, eased),
-        scale: lerp(BLEED, 1, eased),
-        shadow: t > 0.02 ? '0 8px 18px rgba(0,0,0,.5)' : 'none',
-        glow: 0,
-      };
-    }
-    if (e < resolvedHoldEnd)
-      return {
-        ...base,
-        left: def.scatter.left,
-        top: def.scatter.top,
-        rot: def.scatter.rot,
-        scale: 1,
-        shadow: '0 8px 18px rgba(0,0,0,.5)',
-        glow: 0,
-      };
-    const gt = Math.min(
-      1,
-      Math.max(0, (e - resolvedHoldEnd - def.delay) / (gatherEnd - resolvedHoldEnd - def.delay)),
-    );
-    const eased = easeOutCubic(gt);
-    return {
-      ...base,
-      left: lerp(def.scatter.left, def.home.left, eased),
-      top: lerp(def.scatter.top, def.home.top, eased),
-      rot: lerp(def.scatter.rot, 0, eased),
-      scale: lerp(1, BLEED, eased),
-      shadow: gt < 0.98 ? '0 8px 18px rgba(0,0,0,.5)' : 'none',
-      glow: 0,
-    };
-  }
-
-  // focal piece
-  const rotateEnd = def.mode === 'mod' ? modEnd : hardEnd;
-  if (e < stageEnd) {
-    const t = easeOutCubic(Math.min(1, (e - holdEnd) / (stageEnd - holdEnd)));
-    return {
-      ...base,
-      left: lerp(def.home.left, def.staged.left, t),
-      top: lerp(def.home.top, def.staged.top, t),
-      rot: lerp(0, def.wrongAngle, t),
-      scale: lerp(BLEED, 1.9, t),
-      shadow: '0 12px 26px rgba(0,0,0,.55)',
-      glow: 0,
-    };
-  }
-  if (e < rotateEnd) {
-    const t = (e - stageEnd) / (rotateEnd - stageEnd);
-    let rot: number;
-    let scale: number;
-    if (def.mode === 'mod') {
-      const sr = steppedAngle(
-        t,
-        def.wrongAngle,
-        Math.round(Math.abs(def.wrongAngle) / 90) || 3,
-      );
-      rot = sr.rotation;
-      scale = 1.9 + (sr.scale - 1) * 0.8;
-    } else {
-      rot = lerp(def.wrongAngle, 0, easeOutCubic(t));
-      scale = 1.9;
-    }
-    return {
-      ...base,
-      left: def.staged.left,
-      top: def.staged.top,
-      rot,
-      scale,
-      shadow: '0 12px 26px rgba(0,0,0,.55)',
-      glow: 0,
-    };
-  }
-  if (e < resolvedHoldEnd) {
-    const settleT = Math.min(1, (e - rotateEnd) / 260);
-    const scale = 1.9 + (1 - settleT) * 0.15;
-    const glow = Math.max(0, 1 - (e - rotateEnd) / 500);
-    return {
-      ...base,
-      left: def.staged.left,
-      top: def.staged.top,
-      rot: 0,
-      scale,
-      shadow: '0 14px 30px rgba(0,0,0,.6)',
-      glow,
-    };
-  }
-  const gt = easeOutCubic(
-    Math.min(1, Math.max(0, (e - resolvedHoldEnd) / (gatherEnd - resolvedHoldEnd))),
-  );
-  return {
-    ...base,
-    left: lerp(def.staged.left, def.home.left, gt),
-    top: lerp(def.staged.top, def.home.top, gt),
-    rot: 0,
-    scale: lerp(1.9, BLEED, gt),
-    shadow: gt < 0.98 ? '0 12px 26px rgba(0,0,0,.55)' : 'none',
-    glow: 0,
+export function rotationPieceAt(def: RotationPieceDef, e: number): RotationPieceState {
+  const base = {
+    visible: true,
+    w: def.w,
+    h: def.h,
+    clip: def.clip,
+    slotLeft: def.slot.left,
+    slotTop: def.slot.top,
   };
+  const atSlot: RotationPieceState = {
+    ...base,
+    left: def.slot.left,
+    top: def.slot.top,
+    rot: 0,
+    scale: 1,
+  };
+  const spunAngle = def.spinDir * def.steps * 90; // orientation while scattered
+
+  // A — assembled hold
+  if (e < ROTATION_HOLD1_END) return atSlot;
+
+  // B — scatter outward to the far side. easeInOutCubic (not easeOut) so the
+  // piece lifts gently out of its hole instead of snapping away — the long
+  // travel then reads as deliberate. Rotation tumbles smoothly to the spun
+  // orientation over the same curve.
+  if (e < ROTATION_SCATTER_END) {
+    const dur = Math.max(1, ROTATION_SCATTER_END - ROTATION_HOLD1_END - def.delay);
+    const t = Math.min(1, Math.max(0, (e - ROTATION_HOLD1_END - def.delay) / dur));
+    const k = easeInOutCubic(t);
+    return {
+      ...base,
+      left: lerp(def.slot.left, def.scatter.left, k),
+      top: lerp(def.slot.top, def.scatter.top, k),
+      rot: lerp(0, spunAngle, k),
+      scale: 1,
+    };
+  }
+
+  // C — scattered hold
+  if (e < ROTATION_GATHER_START) {
+    return {
+      ...base,
+      left: def.scatter.left,
+      top: def.scatter.top,
+      rot: spunAngle,
+      scale: 1,
+    };
+  }
+
+  // D — fly home across the frame. Position uses easeInOutSine over the whole
+  // (long) window so the piece is visibly travelling for most of it rather than
+  // snapping ~90% of the way home in the first second. Rotation runs on its OWN
+  // fixed-tempo clock (ROTATION_STEP_MS per quarter-turn, so a 1-step and a
+  // 4-step piece snap at the same speed) and finishes before the piece seats,
+  // leaving a short upright glide into the hole. Each step overshoots + holds +
+  // settles (ROTATION_SNAP).
+  if (e < ROTATION_GATHER_END) {
+    const local = e - ROTATION_GATHER_START - def.delay;
+    const posDur = Math.max(1, ROTATION_GATHER_END - ROTATION_GATHER_START - def.delay);
+    const kPos = easeInOutSine(Math.min(1, Math.max(0, local / posDur)));
+    const tRot = Math.min(1, Math.max(0, local / (def.steps * ROTATION_STEP_MS)));
+    const sr = steppedAngle(tRot, def.steps * 90, def.steps, ROTATION_SNAP);
+    return {
+      ...base,
+      left: lerp(def.scatter.left, def.slot.left, kPos),
+      top: lerp(def.scatter.top, def.slot.top, kPos),
+      rot: def.spinDir * sr.rotation,
+      scale: sr.scale,
+    };
+  }
+
+  // E — resolved hold, until the loop wraps back to A (same pose → no jump)
+  return atSlot;
 }
 
-export function mtnShowCopyAt(e: number): boolean {
-  return e >= MTN_HARD_ROTATE_END + 150 && e < MTN_RESOLVED_HOLD_END + 400;
+/** The breathing hole outline shows while its piece is away from home — it
+ * fades out just before the piece seats so the two never fight. */
+export function rotationSlotVisibleAt(def: RotationPieceDef, e: number): boolean {
+  const gone = ROTATION_HOLD1_END + def.delay + 100;
+  const back = ROTATION_GATHER_END - 350;
+  return e > gone && e < back;
 }

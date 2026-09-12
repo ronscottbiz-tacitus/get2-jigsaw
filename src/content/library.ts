@@ -116,10 +116,16 @@ export const VIDEOS: VideoItem[] = [
 export const fullSrcForKey = (key: string) => imgFull(key);
 export const posterSrcForKey = (key: string) => poster(key);
 
-/** The clip the marketing hero uses as its live backdrop. */
+/** The clip the "Rotation changes everything." section uses as its live
+ * backdrop (this effect used to be the marketing hero's — the names stuck). */
 export const HERO_VIDEO_SRC =
   VIDEOS.find((v) => v.key === 'jellyfish')?.src ?? '/uploads/jellyfish.mp4';
 export const HERO_POSTER_SRC = poster('jellyfish');
+
+/** The clip the marketing hero's 48-piece grid uses as its live backdrop. */
+export const MURMURATION_VIDEO_SRC =
+  VIDEOS.find((v) => v.key === 'murmuration')?.src ?? '/uploads/murmuration.mp4';
+export const MURMURATION_POSTER_SRC = poster('murmuration');
 
 export const DEFAULT_IMAGE_SRC = IMAGES[0].full; // Mountain Valley
 export const DEFAULT_VIDEO_SRC = VIDEOS[1].src; // Balloons — matches the prototype default
