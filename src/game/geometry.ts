@@ -177,6 +177,7 @@ export function generateGeometry(
         pathD,
         staggerDelay,
         animDur,
+        zOrder: 0,
       });
     }
   }

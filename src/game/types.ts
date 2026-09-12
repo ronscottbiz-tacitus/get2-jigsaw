@@ -38,6 +38,12 @@ export interface Piece {
   pathD: string;
   staggerDelay: number;
   animDur: number;
+  /** Bumped to a fresh, higher value whenever this piece's group is picked
+   * up. Used to break ties among idle pieces so the one you last touched
+   * always renders above ones you haven't — otherwise overlapping idle
+   * pieces stack in arbitrary creation order and the top one can be
+   * unclickable. */
+  zOrder: number;
 }
 
 /** Per-edge tab/notch parameters. Generated once per interior edge and shared

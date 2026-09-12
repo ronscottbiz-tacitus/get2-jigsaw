@@ -150,6 +150,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private lastDownId: string | null = null;
   private lastDownTime = 0;
   private wonHandled = false;
+  private zCounter = 0;
 
   // DOM refs
   private canvasEl: HTMLCanvasElement | null = null;
@@ -947,7 +948,14 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       anchorStartTop: p.curTop,
       memberIds: new Set(members.map((m) => m.id)),
     };
-    this.setState({ selectedId: id, draggingGroupId: p.groupId });
+    const stamp = ++this.zCounter;
+    this.setState((s) => ({
+      selectedId: id,
+      draggingGroupId: p.groupId,
+      pieces: s.pieces.map((pp) =>
+        pp.groupId === p.groupId ? { ...pp, zOrder: stamp } : pp,
+      ),
+    }));
   };
 
   private onPieceMove = (_id: string | null, e: React.PointerEvent) => {
@@ -1624,6 +1632,18 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
    * `renderVals().pieces` map, including the intro-phase branches. */
   private buildPieceViews() {
     const s = this.state;
+    // Idle (not dragging/hinted/selected) pieces used to share one flat
+    // z-index, with ties broken by original creation order — so whichever
+    // piece you dropped last had only a coin-flip chance of actually
+    // rendering on top of another idle piece it overlaps. Rank by zOrder
+    // (stamped in onPieceDown) so the most recently touched piece/group
+    // always wins the tie, bounded well below the special tiers so it can
+    // never run into them regardless of how long the session runs.
+    const idleRanks = new Map<number, number>();
+    Array.from(new Set(s.pieces.filter((p) => !p.solved).map((p) => p.zOrder)))
+      .sort((a, b) => a - b)
+      .forEach((val, i) => idleRanks.set(val, i));
+
     return s.pieces.map((p): PieceView => {
       if (s.introPhase === 'hold') {
         return {
@@ -1716,7 +1736,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
               ? 700
               : p.id === s.selectedId
                 ? 600
-                : 200,
+                : 200 + (idleRanks.get(p.zOrder) ?? 0),
         shadow,
         filter,
         transition,
