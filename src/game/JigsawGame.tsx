@@ -109,6 +109,11 @@ interface JigsawGameState {
   pulseGroupId: string | null;
   draggingGroupId: string | null;
   stageScale: number;
+  /** True on coarse-pointer (touch) devices — widens the rotate handle and
+   * loosens snap/magnet tolerances, since finger drags are far less precise
+   * than a mouse. Tracked live via matchMedia so it still reacts if the
+   * pointer type changes mid-session (e.g. devtools device emulation). */
+  isCoarsePointer: boolean;
   bgColor: string;
   mode: RenderMode;
   contentType: ContentType;
@@ -184,6 +189,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private lastCanvasDraw = 0;
   private measureScheduled = false;
   private resizeObs?: ResizeObserver;
+  private coarsePointerMQ?: MediaQueryList;
 
   state: JigsawGameState = {
     pieces: [],
@@ -202,6 +208,10 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     pulseGroupId: null,
     draggingGroupId: null,
     stageScale: 1,
+    isCoarsePointer:
+      typeof window !== 'undefined' && !!window.matchMedia
+        ? window.matchMedia('(pointer: coarse)').matches
+        : false,
     bgColor: BG_PRESETS[0].hex,
     mode: 'image',
     contentType: 'static',
@@ -258,6 +268,11 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     window.addEventListener('resize', this.measureScale);
     requestAnimationFrame(this.measureScale);
     this.drawRaf = requestAnimationFrame(this.drawVideoFrame);
+
+    if (window.matchMedia) {
+      this.coarsePointerMQ = window.matchMedia('(pointer: coarse)');
+      this.coarsePointerMQ.addEventListener('change', this.onCoarsePointerChange);
+    }
   }
 
   componentWillUnmount() {
@@ -273,7 +288,12 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     cancelAnimationFrame(this.drawRaf ?? 0);
     window.removeEventListener('resize', this.measureScale);
     this.resizeObs?.disconnect();
+    this.coarsePointerMQ?.removeEventListener('change', this.onCoarsePointerChange);
   }
+
+  private onCoarsePointerChange = (e: MediaQueryListEvent) => {
+    this.setState({ isCoarsePointer: e.matches });
+  };
 
   // ---- derived dims / stage scale ------------------------------------
 
@@ -282,6 +302,16 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const cellH = BOARD_H / rows;
     this.magnetRadius = Math.min(cellW, cellH) * 0.9;
     this.snapTol = Math.max(14, Math.min(cellW, cellH) * 0.24);
+    this.applyTouchForgiveness();
+  }
+
+  /** Loosen snap/magnet tolerances on coarse-pointer (touch) devices, where a
+   * finger drop is far less precise than a mouse click. Mouse behavior (and
+   * the ported-from-prototype base tolerances) is unchanged. */
+  private applyTouchForgiveness() {
+    if (!this.state.isCoarsePointer) return;
+    this.magnetRadius *= 1.35;
+    this.snapTol *= 1.5;
   }
 
   private setStageRef = (el: HTMLDivElement | null) => {
@@ -708,6 +738,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const geo = generateGeometry(rows, cols, difficulty);
     this.magnetRadius = geo.magnetRadius;
     this.snapTol = geo.snapTol;
+    this.applyTouchForgiveness();
 
     const isVideo = this.state.mode === 'video';
     if (isVideo && this.videoEl) {
@@ -1564,8 +1595,8 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                     position: 'absolute',
                     left: handle.left,
                     top: handle.top,
-                    width: 34,
-                    height: 34,
+                    width: handle.size,
+                    height: handle.size,
                     borderRadius: '50%',
                     background: '#3fae7d',
                     color: '#100e0c',
@@ -1578,7 +1609,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                     touchAction: 'none',
                   }}
                 >
-                  <RotateIcon />
+                  <RotateIcon size={handle.size * 0.47} />
                 </div>
               )}
 
@@ -1638,14 +1669,24 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const p = s.pieces.find((pp) => pp.id === s.selectedId);
     if (!p || p.solved || s.difficulty === 'easy' || this.groupSize(p.groupId) !== 1)
       return null;
-    const left = p.curLeft + p.boxW / 2 - 17;
-    const top = p.curTop - 34;
+    // The handle lives inside the `.stage` div, which is itself scaled down
+    // by `stageScale` to fit narrow viewports — so a fixed stage-unit size
+    // shrinks right along with it (34 stage units at a 0.3 scale renders as
+    // a ~10px circle on screen). Apple/Google both put the comfortable-tap
+    // floor at 44 CSS px; on a coarse pointer, size inversely to the current
+    // scale so the on-screen circle never drops below that regardless of how
+    // small the board has scaled. Mouse/desktop keeps the original 34.
+    const scale = s.stageScale || 1;
+    const size = s.isCoarsePointer ? Math.max(34, 44 / scale) : 34;
+    const left = p.curLeft + p.boxW / 2 - size / 2;
+    const top = p.curTop - size;
     if (s.difficulty === 'moderate') {
       return {
         isButton: true as const,
         isDrag: false as const,
         left,
         top,
+        size,
         onClick: this.rotateSelected90,
       };
     }
@@ -1654,6 +1695,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       isDrag: true as const,
       left,
       top,
+      size,
       onDown: this.onRotateHandleDown,
       onMove: this.onRotateHandleMove,
       onUp: this.onRotateHandleUp,
@@ -1808,12 +1850,12 @@ interface PieceView {
   onDouble: (e: React.SyntheticEvent) => void;
 }
 
-function RotateIcon() {
+function RotateIcon({ size = 16 }: { size?: number }) {
   const st: CSSProperties = { display: 'block' };
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
