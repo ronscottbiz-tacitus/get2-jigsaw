@@ -176,8 +176,12 @@ export const HERO_GRID_SCATTER_END = 5900; // pieces have reached the far side
 export const HERO_GRID_GATHER_START = 6400; // begin flying home (brief scattered beat)
 export const HERO_GRID_GATHER_END = 11400; // pieces are back in their holes, upright
 export const HERO_GRID_FLOURISH_START = 11700; // brief settle hold, then the centre block spins
-export const HERO_GRID_FLOURISH_END = 13100;
-export const HERO_GRID_TOTAL = 13800; // + a final hold, then the loop wraps
+// 2200ms for the 4-quarter-turn flourish (~550ms/step) — like the fly-in fix,
+// a fixed 300ms/step tempo (1200ms total) was too fast to read as 4 distinct
+// beats, especially with FLOURISH_SNAP's bigger overshoot needing more time
+// to land clearly.
+export const HERO_GRID_FLOURISH_END = 13900;
+export const HERO_GRID_TOTAL = 14600; // + a final hold, then the loop wraps
 
 /** No longer used to pace the fly-in rotation (see `heroGridPieceAt` — each
  * piece's rotation is now spread across its own `posDur`, the same window its
@@ -202,7 +206,6 @@ export const HERO_GRID_SNAP: SteppedOpts = {
 /** Quarter-turns the centre-block flourish spins through — a full extra
  * rotation, so it lands back upright exactly where it started. */
 export const HERO_GRID_FLOURISH_STEPS = 4;
-export const HERO_GRID_FLOURISH_STEP_MS = 300;
 
 /** More exaggerated than `HERO_GRID_SNAP`: bigger overshoot, longer hold at the
  * peak, and a bigger scale pop — the flourish should read as distinctly
@@ -412,7 +415,10 @@ export function heroGridPieceAt(def: HeroGridPieceDef, e: number): HeroGridPiece
   if (e < HERO_GRID_FLOURISH_END) {
     if (!def.flourish) return atSlot;
     const local = e - HERO_GRID_FLOURISH_START - def.flourishDelay;
-    const dur = HERO_GRID_FLOURISH_STEPS * HERO_GRID_FLOURISH_STEP_MS;
+    // Spread across the flourish's own window, same pattern as the fly-in fix
+    // — not a fixed per-step tempo, so all 4 quarter-turns are individually
+    // visible instead of firing off in a blur.
+    const dur = Math.max(1, HERO_GRID_FLOURISH_END - HERO_GRID_FLOURISH_START - def.flourishDelay);
     const t = clamp01(local / dur);
     const sr = steppedAngle(t, 360, HERO_GRID_FLOURISH_STEPS, HERO_GRID_FLOURISH_SNAP);
     return {

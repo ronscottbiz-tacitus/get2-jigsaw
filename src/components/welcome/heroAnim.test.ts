@@ -125,6 +125,10 @@ describe('hero grid choreography', () => {
     }
   });
 
+  it('flourish window is long enough for 4 quarter-turns to read individually (>= 2000ms)', () => {
+    expect(HERO_GRID_FLOURISH_END - HERO_GRID_FLOURISH_START).toBeGreaterThanOrEqual(2000);
+  });
+
   it('flourish: only the centred block moves, spinning further and bigger than the fly-in settle', () => {
     const mid = (HERO_GRID_FLOURISH_START + HERO_GRID_FLOURISH_END) / 2;
     for (const d of defs) {
@@ -147,6 +151,22 @@ describe('hero grid choreography', () => {
       // bigger scale pop than the plain fly-in settle (~1.1)
       expect(maxScale).toBeGreaterThan(1.2);
     }
+  });
+
+  it('flourish rotation is spread across its own window, not a fixed per-step tempo', () => {
+    // Regression guard: the flourish used to run at a fixed 300ms/step tempo
+    // (HERO_GRID_FLOURISH_STEPS * 300 = 1200ms total — that constant has since
+    // been removed), finishing the whole 360° spin well before the window
+    // closed. Sampled at the point that old fixed tempo would already have
+    // finished, a flourish piece should still be clearly mid-spin under the
+    // new whole-window pacing.
+    const flourishPiece = defs.find((d) => d.flourish);
+    expect(flourishPiece).toBeDefined();
+    if (!flourishPiece) return;
+    const oldFixedTempoTotal = 4 * 300; // old HERO_GRID_FLOURISH_STEPS * STEP_MS
+    const e = HERO_GRID_FLOURISH_START + flourishPiece.flourishDelay + oldFixedTempoTotal + 50;
+    const p = heroGridPieceAt(flourishPiece, e);
+    expect(Math.abs(norm360(p.rot))).toBeGreaterThan(20);
   });
 
   it('flourish block lands back upright exactly where it started', () => {
