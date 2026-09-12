@@ -169,24 +169,34 @@ export const HERO_GRID_ROWS = 6;
 export const HERO_GRID_COLS = 8;
 
 export const HERO_GRID_HOLD1_END = 900; // assembled hold
-export const HERO_GRID_SCATTER_END = 3100; // pieces have reached the far side
-export const HERO_GRID_GATHER_START = 3600; // begin flying home (brief scattered beat)
-export const HERO_GRID_GATHER_END = 8600; // pieces are back in their holes, upright
-export const HERO_GRID_FLOURISH_START = 8900; // brief settle hold, then the centre block spins
-export const HERO_GRID_FLOURISH_END = 10300;
-export const HERO_GRID_TOTAL = 11000; // + a final hold, then the loop wraps
+// Scatter-out now takes as long as the fly-in (5000ms) — with 48 pieces
+// launching at once instead of the old hero's 11, a faster scatter read as a
+// jarring speed mismatch against the (confirmed correct) fly-in pace.
+export const HERO_GRID_SCATTER_END = 5900; // pieces have reached the far side
+export const HERO_GRID_GATHER_START = 6400; // begin flying home (brief scattered beat)
+export const HERO_GRID_GATHER_END = 11400; // pieces are back in their holes, upright
+export const HERO_GRID_FLOURISH_START = 11700; // brief settle hold, then the centre block spins
+export const HERO_GRID_FLOURISH_END = 13100;
+export const HERO_GRID_TOTAL = 13800; // + a final hold, then the loop wraps
 
-/** Wall-clock per 90° step on the fly-in — constant regardless of how many
- * quarter-turns a piece does, so every snap has the same tempo. */
+/** No longer used to pace the fly-in rotation (see `heroGridPieceAt` — each
+ * piece's rotation is now spread across its own `posDur`, the same window its
+ * position eases over, not a fixed per-step tempo). Kept because Hero.tsx's
+ * dev debug hook still surfaces it. */
 export const HERO_GRID_STEP_MS = 620;
 
-/** Punchy snap options for the fly-in: fast turn, overshoot held briefly at the
- * peak, and a scale pop — the same curve family as the fly-in always used. */
+/** Snap options for the fly-in. Since each piece's full rotation is now
+ * spread across its whole flight (a 1-step piece turns once, slowly, across
+ * nearly the entire window; a 4-step piece gets four beats spread the same
+ * way), quarter-turns no longer need a fast, punchy overshoot to read — a
+ * bigger `turnPortion` (most of each step's slice is spent actually turning,
+ * not settling) and a smaller overshoot/scale pop keep each turn a clear,
+ * deliberate motion instead of a slow-motion wobble. */
 export const HERO_GRID_SNAP: SteppedOpts = {
-  turnPortion: 0.42,
-  overshoot: 0.155,
-  scalePulse: 0.18,
-  hold: 0.28,
+  turnPortion: 0.72,
+  overshoot: 0.08,
+  scalePulse: 0.1,
+  hold: 0.15,
 };
 
 /** Quarter-turns the centre-block flourish spins through — a full extra
@@ -377,7 +387,12 @@ export function heroGridPieceAt(def: HeroGridPieceDef, e: number): HeroGridPiece
     const local = e - HERO_GRID_GATHER_START - def.delay;
     const posDur = Math.max(1, HERO_GRID_GATHER_END - HERO_GRID_GATHER_START - def.delay);
     const kPos = easeInOutSine(clamp01(local / posDur));
-    const tRot = clamp01(local / (def.steps * HERO_GRID_STEP_MS));
+    // Rotation is spread across the SAME window position eases over (posDur),
+    // not a fixed per-step tempo — otherwise a 1-step piece finishes turning
+    // in well under a second and glides rotation-less for the rest of the
+    // flight while a 4-step piece is still turning much later, and 48 pieces
+    // all landing their turns at different times reads as jittery.
+    const tRot = clamp01(local / posDur);
     const sr = steppedAngle(tRot, def.steps * 90, def.steps, HERO_GRID_SNAP);
     return {
       ...base,

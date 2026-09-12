@@ -24,6 +24,7 @@ import {
   HERO_GRID_FLOURISH_START,
   HERO_GRID_FLOURISH_END,
   HERO_GRID_TOTAL,
+  HERO_GRID_STEP_MS,
 } from './heroAnim';
 
 const W = 1440;
@@ -94,6 +95,26 @@ describe('hero grid choreography', () => {
     }
   });
 
+  it('scatter-out takes as long as the fly-in (matched pacing, not a speed mismatch)', () => {
+    const scatterDur = HERO_GRID_SCATTER_END - HERO_GRID_HOLD1_END;
+    const gatherDur = HERO_GRID_GATHER_END - HERO_GRID_GATHER_START;
+    expect(scatterDur).toBe(gatherDur);
+  });
+
+  it('rotation is spread across the whole flight, not a fixed per-step tempo', () => {
+    // Regression guard: the old formula (`local / (steps * HERO_GRID_STEP_MS)`)
+    // finished a 1-step piece's turn in well under a second, then glided
+    // rotation-less for the rest of the flight. Sampled at the point the OLD
+    // formula would already have snapped upright, the piece should still be
+    // clearly mid-turn under the new whole-flight pacing.
+    const oneStep = defs.find((d) => d.steps === 1);
+    expect(oneStep).toBeDefined();
+    if (!oneStep) return;
+    const oldTempoWouldFinishAt = 1 * HERO_GRID_STEP_MS + 50;
+    const p = heroGridPieceAt(oneStep, HERO_GRID_GATHER_START + oneStep.delay + oldTempoWouldFinishAt);
+    expect(Math.abs(norm360(p.rot))).toBeGreaterThan(20);
+  });
+
   it('flies in and lands upright, in its own slot, before the flourish', () => {
     for (const d of defs) {
       const landed = heroGridPieceAt(d, HERO_GRID_GATHER_END);
@@ -123,7 +144,7 @@ describe('hero grid choreography', () => {
       for (let e = HERO_GRID_FLOURISH_START; e < HERO_GRID_FLOURISH_END; e += 20) {
         maxScale = Math.max(maxScale, heroGridPieceAt(d, e).scale);
       }
-      // bigger scale pop than the plain fly-in settle (~1.18)
+      // bigger scale pop than the plain fly-in settle (~1.1)
       expect(maxScale).toBeGreaterThan(1.2);
     }
   });
