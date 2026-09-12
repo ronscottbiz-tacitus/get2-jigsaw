@@ -161,3 +161,21 @@ export function wagerTickIntervalMs(parSeconds: number): number {
   const step = 0.05;
   return Math.max(50, Math.round((step * parSeconds) / WAGER_STAKE * 1000));
 }
+
+/* ------------------------------------------------------------------------- *
+ *  Hints — 10 free per puzzle attempt (see FREE_HINTS in JigsawGame state),
+ *  with extra packs purchasable from the fake wager balance. Priced per
+ *  difficulty tier, not flat: a 96-piece hard puzzle burns through hints far
+ *  faster than a 25-piece easy one, so a flat price would make hard-mode
+ *  top-ups either a rip-off on easy or a rounding error on hard.
+ * ------------------------------------------------------------------------- */
+
+export const FREE_HINTS = 10;
+
+export const HINT_PACK_SIZE = 5;
+
+export const HINT_PACK_PRICE: Record<Difficulty, number> = {
+  easy: 2,
+  moderate: 4,
+  hard: 7,
+};

@@ -23,6 +23,9 @@ import {
   BG_PRESETS,
   DEFAULT_DIFFICULTY,
   DEFAULT_PIECE_COUNT,
+  FREE_HINTS,
+  HINT_PACK_PRICE,
+  HINT_PACK_SIZE,
   PIECE_COUNT_PRESETS,
   STAGE_H,
   STAGE_W,
@@ -96,6 +99,10 @@ interface JigsawGameState {
   showGhost: boolean;
   soundMuted: boolean;
   hintPieceId: string | null;
+  /** Hints left for this puzzle attempt. Resets to FREE_HINTS on every new
+   * game; top-ups purchased with wager balance add to it but never persist
+   * past the current attempt. */
+  hintsRemaining: number;
   timerHidden: boolean;
   elapsedSec: number;
   startTime: number;
@@ -188,6 +195,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     showGhost: false,
     soundMuted: getSoundMuted(),
     hintPieceId: null,
+    hintsRemaining: FREE_HINTS,
     timerHidden: false,
     elapsedSec: 0,
     startTime: Date.now(),
@@ -721,6 +729,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       startTime: Date.now(),
       elapsedSec: 0,
       hintPieceId: null,
+      hintsRemaining: FREE_HINTS,
       draggingGroupId: null,
       pulseGroupId: null,
       showStatsCard: false,
@@ -1142,6 +1151,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   };
 
   private triggerHint = () => {
+    if (this.state.hintsRemaining <= 0) return;
     const unsolved = this.state.pieces.filter((p) => !p.solved);
     if (!unsolved.length) return;
     const target = this.state.selectedId
@@ -1149,12 +1159,30 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       : null;
     const pick =
       target || unsolved[Math.floor(Math.random() * unsolved.length)];
-    this.setState({ hintPieceId: pick.id, selectedId: pick.id });
+    this.setState((s) => ({
+      hintPieceId: pick.id,
+      selectedId: pick.id,
+      hintsRemaining: s.hintsRemaining - 1,
+    }));
     clearTimeout(this.hintTO);
     this.hintTO = window.setTimeout(
       () => this.setState({ hintPieceId: null }),
       1700,
     );
+  };
+
+  /** Spend from the persistent wager balance to top up this attempt's hint
+   * count. Gated on price by the caller (button disables at insufficient
+   * balance) but re-checked here since state can change between renders. */
+  private buyHints = () => {
+    const price = HINT_PACK_PRICE[this.state.difficulty];
+    if (this.state.wagerBalance < price) return;
+    const wagerBalance = this.state.wagerBalance - price;
+    setWagerBalance(wagerBalance);
+    this.setState((s) => ({
+      wagerBalance,
+      hintsRemaining: s.hintsRemaining + HINT_PACK_SIZE,
+    }));
   };
 
   private formatTime(sec: number) {
@@ -1254,6 +1282,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           totalPieces={s.pieces.length}
           currentImageLabel={labelForSrc('static', s.imageSrc)}
           hintAvailable={s.pieces.some((p) => !p.solved)}
+          hintsRemaining={s.hintsRemaining}
+          hintPackSize={HINT_PACK_SIZE}
+          hintPackPrice={HINT_PACK_PRICE[s.difficulty]}
           wagerActive={s.wagerActive}
           wagerPot={wagerPotNow}
           wagerLost={wagerLost}
@@ -1268,6 +1299,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           onToggleSound={this.toggleSound}
           onToggleTimerHidden={this.toggleTimerHidden}
           onTriggerHint={this.triggerHint}
+          onBuyHints={this.buyHints}
           onNewGame={this.newGameClick}
           onToggleLibrary={this.toggleLibrary}
           onSelectVideo={this.selectVideo}

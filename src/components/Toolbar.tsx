@@ -37,6 +37,9 @@ interface Props {
   totalPieces: number;
   currentImageLabel: string;
   hintAvailable: boolean;
+  hintsRemaining: number;
+  hintPackSize: number;
+  hintPackPrice: number;
   /** wager mode */
   wagerActive: boolean;
   wagerPot: number;
@@ -52,6 +55,7 @@ interface Props {
   onToggleTimerHidden: () => void;
   onToggleSound: () => void;
   onTriggerHint: () => void;
+  onBuyHints: () => void;
   onNewGame: () => void;
   onToggleLibrary: () => void;
   onSelectVideo: (src: string) => void;
@@ -396,12 +400,18 @@ export function Toolbar(p: Props) {
           <button
             type="button"
             onClick={p.onTriggerHint}
+            disabled={!p.hintAvailable || p.hintsRemaining <= 0}
+            title={p.hintsRemaining <= 0 ? 'Out of hints for this puzzle' : undefined}
             style={{
               ...pill,
-              cursor: p.hintAvailable ? 'pointer' : 'default',
-              color: p.hintAvailable ? '#3fae7d' : '#4a453e',
+              cursor:
+                p.hintAvailable && p.hintsRemaining > 0 ? 'pointer' : 'default',
+              color:
+                p.hintAvailable && p.hintsRemaining > 0 ? '#3fae7d' : '#4a453e',
               border: `1px solid ${
-                p.hintAvailable ? 'rgba(63,174,125,.4)' : 'rgba(255,255,255,.08)'
+                p.hintAvailable && p.hintsRemaining > 0
+                  ? 'rgba(63,174,125,.4)'
+                  : 'rgba(255,255,255,.08)'
               }`,
             }}
           >
@@ -417,8 +427,33 @@ export function Toolbar(p: Props) {
             >
               <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-2.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" />
             </svg>
-            Hint
+            Hints: {p.hintsRemaining}
           </button>
+
+          {p.wagerBalance > 0 && (
+            <button
+              type="button"
+              onClick={p.onBuyHints}
+              disabled={p.wagerBalance < p.hintPackPrice}
+              title={`Buy ${p.hintPackSize} more hints for $${p.hintPackPrice.toFixed(
+                2,
+              )} from your wager balance`}
+              style={{
+                ...pill,
+                cursor:
+                  p.wagerBalance >= p.hintPackPrice ? 'pointer' : 'default',
+                color:
+                  p.wagerBalance >= p.hintPackPrice ? '#efaa27' : '#4a453e',
+                border: `1px solid ${
+                  p.wagerBalance >= p.hintPackPrice
+                    ? 'rgba(239,170,39,.4)'
+                    : 'rgba(255,255,255,.08)'
+                }`,
+              }}
+            >
+              +{p.hintPackSize} hints · ${p.hintPackPrice.toFixed(2)}
+            </button>
+          )}
 
           <button
             type="button"
