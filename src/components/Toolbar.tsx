@@ -31,6 +31,7 @@ interface Props {
   bgColor: string;
   showGhost: boolean;
   timerHidden: boolean;
+  soundMuted: boolean;
   timeLabel: string;
   solvedCount: number;
   totalPieces: number;
@@ -49,6 +50,7 @@ interface Props {
   onSetDifficulty: (d: Difficulty) => void;
   onToggleGhost: () => void;
   onToggleTimerHidden: () => void;
+  onToggleSound: () => void;
   onTriggerHint: () => void;
   onNewGame: () => void;
   onToggleLibrary: () => void;
@@ -339,10 +341,56 @@ export function Toolbar(p: Props) {
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
             Ghost preview
+          </button>
+
+          <button
+            type="button"
+            onClick={p.onToggleSound}
+            title={p.soundMuted ? 'Sound off' : 'Sound on'}
+            style={{
+              ...pill,
+              color: p.soundMuted ? ACTIVE : IDLE,
+              border: `1px solid ${
+                p.soundMuted ? 'rgba(63,174,125,.4)' : 'rgba(255,255,255,.12)'
+              }`,
+            }}
+          >
+            {p.soundMuted ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            )}
+            {p.soundMuted ? 'Muted' : 'Sound'}
           </button>
 
           <button

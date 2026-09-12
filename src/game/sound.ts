@@ -7,8 +7,21 @@
  */
 class SoundKit {
   private ctx: AudioContext | null = null;
+  private muted = false;
+
+  setMuted(muted: boolean) {
+    this.muted = muted;
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
 
   private ac(): AudioContext {
+    // Every call site already wraps `ac()` in try/catch and treats a throw
+    // as "audio unavailable" — muting just gives it another true reason to
+    // land there, with no change needed to any of the methods below.
+    if (this.muted) throw new Error('sound muted');
     if (!this.ctx) {
       const Ctx: typeof AudioContext =
         window.AudioContext ||
@@ -22,6 +35,7 @@ class SoundKit {
   }
 
   private vibrate(pattern: number | number[]) {
+    if (this.muted) return;
     try {
       navigator.vibrate?.(pattern);
     } catch {

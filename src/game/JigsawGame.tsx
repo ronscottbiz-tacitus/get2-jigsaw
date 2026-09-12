@@ -48,11 +48,13 @@ import {
   bestTimesFor,
   clearProgress,
   configKey,
+  getSoundMuted,
   getWagerBalance,
   isValidProgress,
   loadProgress,
   recordBestTime,
   saveProgress,
+  setSoundMuted,
   setWagerBalance,
 } from './persistence';
 import type {
@@ -92,6 +94,7 @@ interface JigsawGameState {
   cols: number;
   difficulty: Difficulty;
   showGhost: boolean;
+  soundMuted: boolean;
   hintPieceId: string | null;
   timerHidden: boolean;
   elapsedSec: number;
@@ -182,6 +185,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     cols: 8,
     difficulty: DEFAULT_DIFFICULTY,
     showGhost: false,
+    soundMuted: getSoundMuted(),
     hintPieceId: null,
     timerHidden: false,
     elapsedSec: 0,
@@ -210,6 +214,8 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   // ---- lifecycle -------------------------------------------------------
 
   componentDidMount() {
+    sound.setMuted(this.state.soundMuted);
+
     let saved: SavedProgress | null = null;
     try {
       saved = loadProgress();
@@ -1057,6 +1063,13 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   // ---- misc controls ------------------------------------
 
   private toggleGhost = () => this.setState((s) => ({ showGhost: !s.showGhost }));
+  private toggleSound = () =>
+    this.setState((s) => {
+      const next = !s.soundMuted;
+      sound.setMuted(next);
+      setSoundMuted(next);
+      return { soundMuted: next };
+    });
   private toggleTimerHidden = () =>
     this.setState((s) => ({ timerHidden: !s.timerHidden }));
 
@@ -1225,8 +1238,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           contentType={s.contentType}
           videoSrc={s.videoSrc}
           bgColor={s.bgColor}
-          showGhost={s.showGhost}
+           showGhost={s.showGhost}
           timerHidden={s.timerHidden}
+          soundMuted={s.soundMuted}
           timeLabel={this.formatTime(s.elapsedSec)}
           solvedCount={s.solvedCount}
           totalPieces={s.pieces.length}
@@ -1243,6 +1257,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           onSetPieceCount={this.setPieceCount}
           onSetDifficulty={this.setDifficulty}
           onToggleGhost={this.toggleGhost}
+          onToggleSound={this.toggleSound}
           onToggleTimerHidden={this.toggleTimerHidden}
           onTriggerHint={this.triggerHint}
           onNewGame={this.newGameClick}

@@ -9,6 +9,7 @@
 import {
   BEST_TIMES_KEY,
   PROGRESS_KEY,
+  SOUND_MUTED_KEY,
   WAGER_BALANCE_KEY,
   WELCOMED_KEY,
 } from './constants';
@@ -74,6 +75,24 @@ export function getWagerBalance(): number {
 export function setWagerBalance(n: number): void {
   try {
     localStorage.setItem(WAGER_BALANCE_KEY, String(n));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Persistent sound-muted preference. Defaults to false (sound on) for a
+ * first-time player or an unreadable store. */
+export function getSoundMuted(): boolean {
+  try {
+    return localStorage.getItem(SOUND_MUTED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setSoundMuted(muted: boolean): void {
+  try {
+    localStorage.setItem(SOUND_MUTED_KEY, String(muted));
   } catch {
     /* storage unavailable */
   }

@@ -34,6 +34,7 @@ export const DEFAULT_DIFFICULTY = 'moderate' as const;
 export const BEST_TIMES_KEY = 'jigsaw_best_times_v1';
 export const PROGRESS_KEY = 'jigsaw_progress_v1';
 export const WELCOMED_KEY = 'jigsaw_welcomed_v1';
+export const SOUND_MUTED_KEY = 'jigsaw_sound_muted_v1';
 
 /** Board background swatches, each paired with the board-outline colour that
  * reads against it. `hex` is the flat fill/identity colour; `css`, when set,
