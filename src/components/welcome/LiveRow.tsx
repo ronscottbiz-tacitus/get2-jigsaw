@@ -139,7 +139,7 @@ export function LiveRow() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '80px 24px',
+        padding: '80px max(24px, env(safe-area-inset-right, 0px)) 80px max(24px, env(safe-area-inset-left, 0px))',
         gap: 48,
       }}
     >
@@ -157,11 +157,11 @@ export function LiveRow() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(5,1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
           gap: 14,
           width: '100%',
           maxWidth: 1400,
-          padding: '0 40px',
+          padding: '0 clamp(0px, 6vw, 40px)',
           boxSizing: 'border-box',
         }}
       >

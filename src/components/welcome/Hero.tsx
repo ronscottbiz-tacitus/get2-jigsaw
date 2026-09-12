@@ -327,7 +327,8 @@ export class Hero extends Component<Props, State> {
             position: 'relative',
             zIndex: 2,
             textAlign: 'center',
-            padding: '0 24px',
+            paddingLeft: 'max(24px, env(safe-area-inset-left, 0px))',
+            paddingRight: 'max(24px, env(safe-area-inset-right, 0px))',
           }}
         >
           <div
