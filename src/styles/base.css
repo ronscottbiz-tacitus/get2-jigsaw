@@ -106,6 +106,10 @@ button {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
 }
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

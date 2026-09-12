@@ -31,6 +31,12 @@ export const PIECE_COUNT_PRESETS: Record<number, [number, number]> = {
 export const DEFAULT_PIECE_COUNT = 48;
 export const DEFAULT_DIFFICULTY = 'moderate' as const;
 
+/** Below this viewport width, the Toolbar switches to a compact header +
+ * bottom-sheet layout instead of its single wide row. Board/piece sizing is
+ * unaffected — that's driven purely by `useStageScale`'s width-based
+ * scale-to-fit, independent of this breakpoint. */
+export const MOBILE_BREAKPOINT = 640;
+
 export const BEST_TIMES_KEY = 'jigsaw_best_times_v1';
 export const PROGRESS_KEY = 'jigsaw_progress_v1';
 export const WELCOMED_KEY = 'jigsaw_welcomed_v1';
