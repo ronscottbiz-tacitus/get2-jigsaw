@@ -34,6 +34,7 @@ import {
   wagerTickIntervalMs,
   wagerUrgency,
 } from './constants';
+import { FuseGauge } from '../components/FuseGauge';
 import { generateGeometry } from './geometry';
 import {
   clampAnchor,
@@ -1301,6 +1302,13 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
                   borderRadius: 4,
                   pointerEvents: 'none',
                 }}
+              />
+
+              <FuseGauge
+                active={s.wagerActive}
+                potNow={wagerPotNow}
+                parSec={s.wagerParSec}
+                elapsedSec={s.wagerElapsedSec}
               />
 
               {s.showGhost && isImageMode && (
