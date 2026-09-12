@@ -212,7 +212,7 @@ function DesktopToolbar(p: Props) {
           Overview
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600 }}>Custom Puzzle</span>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>{p.currentImageLabel}</span>
           <span
             style={{
               fontSize: 11,
@@ -639,8 +639,8 @@ function MobileToolbar(p: Props) {
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
-        >
-          Custom Puzzle
+         >
+          {p.currentImageLabel}
         </span>
         <button
           type="button"

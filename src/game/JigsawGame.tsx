@@ -1311,7 +1311,11 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           timeLabel={this.formatTime(s.elapsedSec)}
           solvedCount={s.solvedCount}
           totalPieces={s.pieces.length}
-          currentImageLabel={labelForSrc('static', s.imageSrc)}
+          currentImageLabel={
+            s.contentType === 'video'
+              ? labelForSrc('video', s.videoSrc)
+              : labelForSrc('static', s.imageSrc)
+        }
           hintAvailable={s.pieces.some((p) => !p.solved)}
           hintsRemaining={s.hintsRemaining}
           hintPackSize={HINT_PACK_SIZE}
