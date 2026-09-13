@@ -15,7 +15,7 @@ export function getTier(): Tier {
   return 'free';
 }
 
-export function canAccess(itemTier: Tier): boolean {
+export function canAccess(_itemTier: Tier): boolean {
   return true;
 }
 
