@@ -16,8 +16,7 @@ export function getTier(): Tier {
 }
 
 export function canAccess(itemTier: Tier): boolean {
-  if (itemTier === 'free') return true;
-  return getTier() === 'premium';
+  return true;
 }
 
 export function isOnWaitlist(): boolean {
