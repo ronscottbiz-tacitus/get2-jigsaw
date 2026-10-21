@@ -14,10 +14,8 @@
 import {
   BOARD_W,
   BOARD_H,
-  STAGE_W,
-  STAGE_H,
-  BOARD_OFFSET_X,
-  BOARD_OFFSET_Y,
+  DESKTOP_LAYOUT,
+  type StageLayout,
 } from './constants';
 import type { Difficulty, EdgeParams, Piece } from './types';
 
@@ -106,6 +104,7 @@ export function generateGeometry(
   rows: number,
   cols: number,
   difficulty: Difficulty,
+  layout: StageLayout = DESKTOP_LAYOUT,
 ): PuzzleGeometry {
   const cellW = BOARD_W / cols;
   const cellH = BOARD_H / rows;
@@ -125,6 +124,10 @@ export function generateGeometry(
     vEdge.push([]);
     for (let c = 0; c < cols - 1; c++) vEdge[r].push(randEdgeParams());
   }
+
+  const traySlots = layout.tray
+    ? trayScatterSlots(rows * cols, boxW, boxH, layout.tray)
+    : null;
 
   const pieces: Piece[] = [];
   for (let r = 0; r < rows; r++) {
@@ -149,13 +152,18 @@ export function generateGeometry(
         buildEdge(BR, BL, r === rows - 1, bottomOutward, bottomEdge || {}) +
         buildEdge(BL, TL, c === 0, leftOutward, leftEdge || {});
       const pathD = `M ${TL.x} ${TL.y} ${d} Z`;
-      const homeLeft = BOARD_OFFSET_X + cellLeft - pad;
-      const homeTop = BOARD_OFFSET_Y + cellTop - pad;
+      const homeLeft = layout.boardX + cellLeft - pad;
+      const homeTop = layout.boardY + cellTop - pad;
       let rotation = 0;
       if (difficulty === 'moderate') rotation = 90 * Math.floor(Math.random() * 4);
       else if (difficulty === 'hard') rotation = Math.random() * 360;
-      const scatterLeft = Math.round(Math.random() * (STAGE_W - boxW));
-      const scatterTop = Math.round(Math.random() * (STAGE_H - boxH));
+      const slot = traySlots ? traySlots[r * cols + c] : null;
+      const scatterLeft = slot
+        ? slot.left
+        : Math.round(Math.random() * (layout.w - boxW));
+      const scatterTop = slot
+        ? slot.top
+        : Math.round(Math.random() * (layout.h - boxH));
       const staggerDelay = Math.round(Math.random() * 150);
       const animDur = 480 + Math.round(Math.random() * 240);
       pieces.push({
@@ -189,4 +197,43 @@ export function generateGeometry(
     magnetRadius: Math.min(cellW, cellH) * 0.9,
     snapTol: Math.max(14, Math.min(cellW, cellH) * 0.24),
   };
+}
+
+/**
+ * Spread `n` pieces evenly across a tray region (the phone layout's area below
+ * the board): a jittered grid sized to the tray's aspect, slots shuffled so
+ * neighbours on the board don't land next to each other. Unlike the desktop's
+ * fully random scatter this keeps pieces from piling up on a small screen.
+ * Returns the top-left of each piece's padded bounding box, kept inside the
+ * tray.
+ */
+export function trayScatterSlots(
+  n: number,
+  boxW: number,
+  boxH: number,
+  tray: { x: number; y: number; w: number; h: number },
+): { left: number; top: number }[] {
+  const cols = Math.max(1, Math.round(Math.sqrt((n * tray.w) / tray.h)));
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const stepX = tray.w / cols;
+  const stepY = tray.h / rows;
+  const slots: { left: number; top: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = tray.x + stepX * (c + 0.5) + (Math.random() - 0.5) * stepX * 0.2;
+      const cy = tray.y + stepY * (r + 0.5) + (Math.random() - 0.5) * stepY * 0.2;
+      const left = Math.round(
+        Math.min(tray.x + tray.w - boxW, Math.max(tray.x, cx - boxW / 2)),
+      );
+      const top = Math.round(
+        Math.min(tray.y + tray.h - boxH, Math.max(tray.y, cy - boxH / 2)),
+      );
+      slots.push({ left, top });
+    }
+  }
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]];
+  }
+  return slots.slice(0, n);
 }

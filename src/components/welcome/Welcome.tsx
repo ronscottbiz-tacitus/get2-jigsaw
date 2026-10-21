@@ -3,7 +3,8 @@
  * localStorage) and reachable again from the in-app "Overview" link. Four
  * stacked full-height sections; a fixed Get2 logo (top-left) and a persistent
  * Start Playing pill (top-right) sit above everything. "Start Playing" anywhere
- * dismisses this and drops into the puzzle picker.
+ * dismisses this and drops into the puzzle picker; tapping any library tile
+ * opens the picker with that puzzle selected.
  * Ported from the prototype's `showWelcome` block.
  */
 import { ACCENT } from '../../game/constants';
@@ -15,9 +16,11 @@ import { Pricing } from './Pricing';
 
 interface Props {
   onStart: () => void;
+  /** Open the picker with this puzzle preselected. */
+  onPick: (contentType: 'static' | 'video', src: string) => void;
 }
 
-export function Welcome({ onStart }: Props) {
+export function Welcome({ onStart, onPick }: Props) {
   return (
     <div
       style={{
@@ -85,9 +88,9 @@ export function Welcome({ onStart }: Props) {
       </div>
 
       <Hero onStart={onStart} />
-      <LiveRow />
+      <LiveRow onPick={(src) => onPick('video', src)} />
       <RotationDemo />
-      <CuratedGrid onStart={onStart} />
+      <CuratedGrid onStart={onStart} onPick={onPick} />
       <Pricing />
     </div>
   );

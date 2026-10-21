@@ -32,13 +32,20 @@ type GameRef = InstanceType<typeof JigsawGame>;
 async function mountAndScatter(props: {
   difficulty: 'easy' | 'moderate' | 'hard';
   pieceCount: number;
+  /** arm the $5 wager up front, the way the picker does */
+  wager?: boolean;
 }) {
   const ref = createRef<GameRef>();
   const view = render(
     <JigsawGame
       ref={ref}
-      defaultDifficulty={props.difficulty}
-      defaultPieceCount={props.pieceCount}
+      config={{
+        contentType: 'static',
+        src: '/uploads/puzzle-library/full/puz_mountain-valley.jpg',
+        difficulty: props.difficulty,
+        pieceCount: props.pieceCount,
+        wager: !!props.wager,
+      }}
     />,
   );
   const game = ref.current!;
@@ -84,7 +91,7 @@ function rotateUpright(view: ReturnType<typeof render>, game: GameRef, id: strin
 }
 
 async function expectWinCard(elapsedRecorded = true) {
-  expect(await screen.findByText('Solved!', {}, { timeout: 3000 })).toBeTruthy();
+  expect(await screen.findByText(/^Solved in \d+:\d\d$/, {}, { timeout: 3000 })).toBeTruthy();
   await screen.findByText(/Best times/i, {}, { timeout: 3000 });
   if (elapsedRecorded) {
     const best = JSON.parse(localStorage.getItem(BEST_TIMES_KEY) || '{}');
@@ -252,14 +259,13 @@ describe('wager mode — integration', () => {
   it('toggle on, solve fast: nets a win, persists the balance, resets wagerActive, shows the result', async () => {
     localStorage.clear();
     setWagerBalance(2); // start with an existing fake balance
-    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25 });
+    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25, wager: true });
 
-    // arm the wager (button near the piece-count / difficulty controls)
-    fireEvent.click(screen.getByRole('button', { name: /Wager \$5/i }));
+    // armed from the picker config
     expect(game.state.wagerActive).toBe(true);
     expect(game.state.wagerParSec).toBeCloseTo(wagerParSeconds(25, 'easy'), 6);
 
-    // the time chip is now the live pot ($10.00 at t≈0)
+    // the top bar shows the live pot ($10.00 at t≈0)
     expect(screen.getByText(/^\$\d+\.\d\d$/)).toBeTruthy();
 
     for (let g = 0; g < 200; g++) {
@@ -282,8 +288,7 @@ describe('wager mode — integration', () => {
 
   it('toggle on, then run the pot to $0: chip floors at $0 with a "wager lost" label, play continues', async () => {
     localStorage.clear();
-    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25 });
-    fireEvent.click(screen.getByRole('button', { name: /Wager \$5/i }));
+    const { view, game } = await mountAndScatter({ difficulty: 'easy', pieceCount: 25, wager: true });
 
     // fast-forward the clock past 2×par so the pot floors
     const par = game.state.wagerParSec;

@@ -5,6 +5,13 @@
  * `clampAnchor`, `computeMagnetOffset`, `tryConnectAndSnap`.
  */
 import { STAGE_W, STAGE_H } from './constants';
+
+/** Stage bounds a dragged group is kept inside. */
+export interface StageBounds {
+  w: number;
+  h: number;
+}
+const DEFAULT_BOUNDS: StageBounds = { w: STAGE_W, h: STAGE_H };
 import type { Difficulty, Piece } from './types';
 
 /** Is `rot` close enough to a correct orientation for this difficulty?
@@ -55,6 +62,7 @@ export function clampAnchor(
   memberIds: Set<string>,
   anchorHomeLeft: number,
   anchorHomeTop: number,
+  bounds: StageBounds = DEFAULT_BOUNDS,
 ): { left: number; top: number } {
   let minLeft = Infinity;
   let minTop = Infinity;
@@ -72,9 +80,9 @@ export function clampAnchor(
   let dxAdj = 0;
   let dyAdj = 0;
   if (minLeft < 0) dxAdj = -minLeft;
-  else if (maxRight > STAGE_W) dxAdj = STAGE_W - maxRight;
+  else if (maxRight > bounds.w) dxAdj = bounds.w - maxRight;
   if (minTop < 0) dyAdj = -minTop;
-  else if (maxBottom > STAGE_H) dyAdj = STAGE_H - maxBottom;
+  else if (maxBottom > bounds.h) dyAdj = bounds.h - maxBottom;
   return { left: anchorLeft + dxAdj, top: anchorTop + dyAdj };
 }
 

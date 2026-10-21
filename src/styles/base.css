@@ -10,7 +10,7 @@
   --get2-accent: #0052ff;
   --game-bg: #100e0c;
   --game-ink: #f2ede6;
-  --game-accent: #3fae7d;
+  --game-accent: #8b5cf6;
   --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
     sans-serif;
   --font-display: 'Archivo Expanded', 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -38,6 +38,19 @@ body {
 #root {
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+/* The game fills exactly one screen so the stage can scale to fit it. */
+.game-root {
+  height: 100vh;
+  height: 100dvh;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
 }
 
 img,
@@ -119,4 +132,14 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* overview library tiles open the picker — show they're clickable */
+.curated-card > div:first-child {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.curated-card:hover > div:first-child,
+.curated-card:focus-visible > div:first-child {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px #8b5cf6;
 }
