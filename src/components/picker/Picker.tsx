@@ -37,6 +37,7 @@ import {
   getWagerBalance,
   setLastSetup,
 } from '../../game/persistence';
+import { LiveVideo } from '../ui/LiveVideo';
 
 export interface ResumeInfo {
   title: string;
@@ -434,21 +435,36 @@ export function Picker({ initial, resume, onResume, onStart, onOverview }: Props
                 borderRadius: 12,
                 overflow: 'hidden',
                 boxSizing: 'border-box',
-                outline: on ? `2px solid ${GAME_ACCENT}` : '2px solid transparent',
-                outlineOffset: -2,
                 background: '#15161a',
               }}
             >
-              <img
-                src={t.thumb}
-                alt=""
-                loading="lazy"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              {t.contentType === 'video' ? (
+                <LiveVideo src={t.src} poster={t.thumb} style={{ width: '100%', height: '100%' }} />
+              ) : (
+                <img
+                  src={t.thumb}
+                  alt=""
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              )}
+              {/* selection ring sits above the image/video */}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 12,
+                  boxShadow: on ? `inset 0 0 0 2px ${GAME_ACCENT}` : 'none',
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
               />
               {t.contentType === 'video' && (
                 <span
                   style={{
                     position: 'absolute',
+                    zIndex: 2,
                     top: 8,
                     left: 8,
                     padding: '3px 8px',
@@ -468,6 +484,7 @@ export function Picker({ initial, resume, onResume, onStart, onOverview }: Props
                 <span
                   style={{
                     position: 'absolute',
+                    zIndex: 2,
                     bottom: 8,
                     right: 8,
                     padding: '3px 8px',
@@ -549,13 +566,20 @@ export function Picker({ initial, resume, onResume, onStart, onOverview }: Props
             }),
       }}
     >
-      {!isPhone && (
-        <img
-          src={selected.thumb}
-          alt={selected.name}
-          style={{ width: '100%', aspectRatio: '7 / 5', objectFit: 'cover', borderRadius: 10, display: 'block' }}
-        />
-      )}
+      {!isPhone &&
+        (selected.contentType === 'video' ? (
+          <LiveVideo
+            src={selected.src}
+            poster={selected.thumb}
+            style={{ width: '100%', aspectRatio: '7 / 5', borderRadius: 10 }}
+          />
+        ) : (
+          <img
+            src={selected.thumb}
+            alt={selected.name}
+            style={{ width: '100%', aspectRatio: '7 / 5', objectFit: 'cover', borderRadius: 10, display: 'block' }}
+          />
+        ))}
       {!isPhone && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontFamily: G2.fontDisplay, fontWeight: 800, fontSize: 22, color: '#fff' }}>
