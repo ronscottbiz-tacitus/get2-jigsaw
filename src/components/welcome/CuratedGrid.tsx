@@ -9,19 +9,36 @@ import { IMAGES, VIDEOS } from '../../content/library';
 
 interface Props {
   onStart: () => void;
+  onPick?: (contentType: 'static' | 'video', src: string) => void;
 }
 
 function Card({
   thumb,
   category,
   name,
+  onClick,
 }: {
   thumb: string;
   category: string;
   name: string;
+  onClick?: () => void;
 }) {
   return (
-    <div style={{ cursor: 'default' }}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Play ${name}`}
+      className="curated-card"
+      style={{
+        cursor: onClick ? 'pointer' : 'default',
+        display: 'block',
+        width: '100%',
+        padding: 0,
+        border: 0,
+        background: 'transparent',
+        textAlign: 'left',
+      }}
+    >
       <div
         style={{
           borderRadius: 8,
@@ -34,7 +51,7 @@ function Card({
         style={{
           fontSize: 10,
           marginTop: 8,
-          color: '#7a7267',
+          color: '#8A8F98',
           textTransform: 'uppercase',
           letterSpacing: '.04em',
         }}
@@ -42,15 +59,14 @@ function Card({
         {category}
       </div>
       <div style={{ fontSize: 12, marginTop: 2, color: '#f2ede6' }}>{name}</div>
-    </div>
+    </button>
   );
 }
 
-export function CuratedGrid({ onStart }: Props) {
+export function CuratedGrid({ onStart, onPick }: Props) {
   return (
     <section
       style={{
-        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -81,10 +97,22 @@ export function CuratedGrid({ onStart }: Props) {
         }}
       >
         {IMAGES.map((i) => (
-          <Card key={i.key} thumb={i.thumb} category={i.category} name={i.name} />
+          <Card
+            key={i.key}
+            thumb={i.thumb}
+            category={i.category}
+            name={i.name}
+            onClick={onPick ? () => onPick('static', i.full) : undefined}
+          />
         ))}
         {VIDEOS.map((v) => (
-          <Card key={v.key} thumb={v.poster} category="Live" name={v.name} />
+          <Card
+            key={v.key}
+            thumb={v.poster}
+            category="Live"
+            name={v.name}
+            onClick={onPick ? () => onPick('video', v.src) : undefined}
+          />
         ))}
       </div>
       <button

@@ -22,12 +22,11 @@ export function Pricing() {
   return (
     <section
       style={{
-        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '80px max(24px, env(safe-area-inset-right, 0px)) 80px max(24px, env(safe-area-inset-left, 0px))',
+        padding: '72px max(24px, env(safe-area-inset-right, 0px)) 120px max(24px, env(safe-area-inset-left, 0px))',
         gap: 48,
       }}
     >

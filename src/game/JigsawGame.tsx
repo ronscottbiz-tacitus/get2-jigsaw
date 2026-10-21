@@ -13,24 +13,25 @@
  *    clipping each piece's Path2D — one video decode instead of N.
  */
 import type * as React from 'react';
-import { Component, type CSSProperties } from 'react';
+import { Component } from 'react';
 import {
   BLEED,
-  BOARD_OFFSET_X,
-  BOARD_OFFSET_Y,
   BOARD_H,
   BOARD_W,
   BG_PRESETS,
   DEFAULT_DIFFICULTY,
   DEFAULT_PIECE_COUNT,
   FREE_HINTS,
+  G2,
+  GAME_ACCENT,
   HINT_PACK_PRICE,
   HINT_PACK_SIZE,
+  MOBILE_BREAKPOINT,
   PIECE_COUNT_PRESETS,
-  STAGE_H,
-  STAGE_W,
-  WAGER_STAKE,
   bgCssFor,
+  isPhoneViewport,
+  layoutFor,
+  type StageLayout,
   wagerNet,
   wagerParSeconds,
   wagerPot,
@@ -38,6 +39,7 @@ import {
   wagerUrgency,
 } from './constants';
 import { FuseGauge } from '../components/FuseGauge';
+import { RotateIcon } from '../components/ui/icons';
 import { generateGeometry } from './geometry';
 import {
   clampAnchor,
@@ -50,7 +52,6 @@ import { sound } from './sound';
 import {
   bestTimesFor,
   clearProgress,
-  configKey,
   getSoundMuted,
   getWagerBalance,
   isValidProgress,
@@ -65,29 +66,46 @@ import type {
   Difficulty,
   IntroPhase,
   Piece,
+  PuzzleConfig,
   RenderMode,
   SavedProgress,
 } from './types';
 import {
   DEFAULT_IMAGE_SRC,
   DEFAULT_VIDEO_SRC,
-  imagesByCategory,
+  IMAGES,
+  VIDEOS,
+  imageBySrc,
   labelForSrc,
+  videoBySrc,
 } from '../content/library';
-import { canAccess } from '../content/tiers';
-import { ResumePrompt } from '../components/ResumePrompt';
-import { ImageLibraryModal } from '../components/ImageLibraryModal';
-import { WinOverlay } from '../components/WinOverlay';
-import { Toolbar } from '../components/Toolbar';
+import { WinCard, WinReveal, type UpNextItem } from '../components/WinOverlay';
+import { GameBar } from '../components/game/GameBar';
+import { Dock } from '../components/game/Dock';
+import { SettingsMenu } from '../components/game/SettingsMenu';
 
 export interface JigsawGameProps {
+  /** What to play — set by the picker. Absent → the defaults below. */
+  config?: PuzzleConfig;
+  /** Pick up the saved in-progress puzzle instead of starting `config`. */
+  resume?: boolean;
   defaultDifficulty?: Difficulty;
   defaultPieceCount?: number;
+  /** Back to the puzzle picker. */
+  onExit?: () => void;
+  /** Start another puzzle (the solved card's "Up next"). */
+  onPlay?: (config: PuzzleConfig) => void;
   /** re-show the marketing / welcome experience. */
   onShowWelcome?: () => void;
   /** dev-only: wipe the "seen welcome" flag and reload. */
   onDevReset?: () => void;
 }
+
+const DIFFICULTY_NAME: Record<Difficulty, string> = {
+  easy: 'Easy',
+  moderate: 'Moderate',
+  hard: 'Hard',
+};
 
 interface JigsawGameState {
   pieces: Piece[];
@@ -119,9 +137,11 @@ interface JigsawGameState {
   contentType: ContentType;
   imageSrc: string;
   videoSrc: string;
-  libraryOpen: boolean;
-  showResumePrompt: boolean;
-  pendingResume: SavedProgress | null;
+  /** Stage layout this game runs on (fixed for the life of a puzzle). */
+  layout: StageLayout;
+  /** Viewport is phone-sized — drives the bar/dock/sheet chrome, live. */
+  isPhone: boolean;
+  settingsOpen: boolean;
   showStatsCard: boolean;
   introPhase: IntroPhase;
   introPulse: boolean;
@@ -168,7 +188,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private canvasEl: HTMLCanvasElement | null = null;
   private videoEl: HTMLVideoElement | null = null;
   private videoEverReady = false;
-  private ghostVideoEl: HTMLVideoElement | null = null;
   private stageEl: HTMLDivElement | null = null;
   private hostEl: HTMLDivElement | null = null;
 
@@ -190,14 +209,23 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   private measureScheduled = false;
   private resizeObs?: ResizeObserver;
   private coarsePointerMQ?: MediaQueryList;
+  private phoneMQ?: MediaQueryList;
+  /** wager armed for the round that just finished — "Up next" keeps it. */
+  private lastRoundWager = false;
 
-  state: JigsawGameState = {
+  state: JigsawGameState = this.initialState();
+
+  private initialState(): JigsawGameState {
+    const cfg = this.props.config;
+    const isVideo = cfg?.contentType === 'video';
+    const phone = isPhoneViewport();
+    return {
     pieces: [],
     solvedCount: 0,
     selectedId: null,
     rows: 6,
     cols: 8,
-    difficulty: DEFAULT_DIFFICULTY,
+    difficulty: cfg?.difficulty ?? this.props.defaultDifficulty ?? DEFAULT_DIFFICULTY,
     showGhost: false,
     soundMuted: getSoundMuted(),
     hintPieceId: null,
@@ -213,22 +241,23 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
         ? window.matchMedia('(pointer: coarse)').matches
         : false,
     bgColor: BG_PRESETS[0].hex,
-    mode: 'image',
-    contentType: 'static',
-    imageSrc: DEFAULT_IMAGE_SRC,
-    videoSrc: DEFAULT_VIDEO_SRC,
-    libraryOpen: false,
-    showResumePrompt: false,
-    pendingResume: null,
+    mode: isVideo ? 'video' : 'image',
+    contentType: isVideo ? 'video' : 'static',
+    imageSrc: cfg && !isVideo ? cfg.src : DEFAULT_IMAGE_SRC,
+    videoSrc: cfg && isVideo ? cfg.src : DEFAULT_VIDEO_SRC,
+    layout: layoutFor(phone ? 'phone' : 'desktop'),
+    isPhone: phone,
+    settingsOpen: false,
     showStatsCard: false,
     introPhase: null,
     introPulse: false,
-    wagerActive: false,
+    wagerActive: !!cfg?.wager,
     wagerParSec: 0,
     wagerBalance: getWagerBalance(),
     wagerResultNet: null,
     wagerElapsedSec: 0,
-  };
+    };
+  }
 
   // ---- lifecycle -------------------------------------------------------
 
@@ -237,7 +266,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     let saved: SavedProgress | null = null;
     try {
-      saved = loadProgress();
+      saved = this.props.resume ? loadProgress() : null;
       if (saved && !isValidProgress(saved)) {
         saved = null;
         clearProgress();
@@ -246,13 +275,10 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       saved = null;
     }
 
-    if (saved) {
-      this.setState({ showResumePrompt: true, pendingResume: saved });
+    if (this.props.resume && saved) {
+      this.resumeFrom(saved);
     } else {
-      const d = this.props.defaultDifficulty || DEFAULT_DIFFICULTY;
-      const n = Number(this.props.defaultPieceCount || DEFAULT_PIECE_COUNT);
-      const preset = PIECE_COUNT_PRESETS[n] || PIECE_COUNT_PRESETS[DEFAULT_PIECE_COUNT];
-      this.newGame(preset[0], preset[1], d);
+      this.startFromConfig();
     }
 
       this.timer = window.setInterval(() => {
@@ -272,8 +298,27 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     if (window.matchMedia) {
       this.coarsePointerMQ = window.matchMedia('(pointer: coarse)');
       this.coarsePointerMQ.addEventListener('change', this.onCoarsePointerChange);
+      this.phoneMQ = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+      this.phoneMQ.addEventListener('change', this.onPhoneChange);
     }
   }
+
+  /** Start the configured puzzle (or the props/defaults when none is given). */
+  private startFromConfig() {
+    const cfg = this.props.config;
+    const d = cfg?.difficulty ?? this.props.defaultDifficulty ?? DEFAULT_DIFFICULTY;
+    const n = Number(cfg?.pieceCount ?? this.props.defaultPieceCount ?? DEFAULT_PIECE_COUNT);
+    const preset = PIECE_COUNT_PRESETS[n] || PIECE_COUNT_PRESETS[DEFAULT_PIECE_COUNT];
+    if (this.state.mode === 'video' && this.videoEl) {
+      this.videoEl.src = this.state.videoSrc;
+    }
+    this.newGame(preset[0], preset[1], d);
+  }
+
+  private onPhoneChange = (e: MediaQueryListEvent) => {
+    this.setState({ isPhone: e.matches });
+    this.measureScale();
+  };
 
   componentWillUnmount() {
     clearInterval(this.timer);
@@ -289,6 +334,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     window.removeEventListener('resize', this.measureScale);
     this.resizeObs?.disconnect();
     this.coarsePointerMQ?.removeEventListener('change', this.onCoarsePointerChange);
+    this.phoneMQ?.removeEventListener('change', this.onPhoneChange);
+    // leaving mid-puzzle (back to the picker) keeps it resumable
+    if (!this.state.introPhase) this.persist();
   }
 
   private onCoarsePointerChange = (e: MediaQueryListEvent) => {
@@ -337,8 +385,12 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       this.measureScheduled = false;
       if (!this.hostEl) return;
       const w = this.hostEl.clientWidth;
+      const h = this.hostEl.clientHeight;
       if (!w) return;
-      const scale = Math.min(1, w / STAGE_W);
+      const L = this.state.layout;
+      // fit both ways, so the whole stage (board + scatter area) is on screen
+      let scale = Math.min(1, w / L.w);
+      if (h > 0) scale = Math.min(scale, h / L.h);
       if (Math.abs(scale - this.state.stageScale) > 0.005) {
         this.setState({ stageScale: scale });
       }
@@ -349,8 +401,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
   private persist = () => {
     const s = this.state;
-    if (!s.pieces.length || s.solvedCount === s.pieces.length || s.showResumePrompt)
-      return;
+    if (!s.pieces.length || s.solvedCount === s.pieces.length) return;
     saveProgress({
       pieces: s.pieces,
       rows: s.rows,
@@ -362,6 +413,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       bgColor: s.bgColor,
       elapsedSec: s.elapsedSec,
       savedAt: Date.now(),
+      layoutKind: s.layout.kind,
     });
   };
 
@@ -373,6 +425,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     sound.winChime();
 
  // settle the wager, if one was in play for this round
+    this.lastRoundWager = this.state.wagerActive;
     if (this.state.wagerActive) {
       this.stopWagerTicker();
       const net =
@@ -398,16 +451,16 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     );
   };
 
-  private resumeGame = () => {
-    const saved = this.state.pendingResume;
-    if (!saved || !isValidProgress(saved)) {
-      this.startFreshFromPrompt();
+  private resumeFrom(saved: SavedProgress) {
+    if (!isValidProgress(saved)) {
+      this.startFromConfig();
       return;
     }
     this.pathCache = {};
     this.wonHandled = false;
     this.computeDerivedDims(saved.rows, saved.cols);
     this.setState({
+      layout: layoutFor(saved.layoutKind),
       pieces: saved.pieces,
       rows: saved.rows,
       cols: saved.cols,
@@ -420,8 +473,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       elapsedSec: saved.elapsedSec,
       startTime: Date.now() - saved.elapsedSec * 1000,
       solvedCount: saved.pieces.filter((p) => p.solved).length,
-      showResumePrompt: false,
-      pendingResume: null,
       selectedId: null,
       draggingGroupId: null,
       pulseGroupId: null,
@@ -435,19 +486,12 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     });
     this.stopWagerTicker();
     if (saved.contentType === 'video' && this.videoEl) {
+      this.videoEl.src = saved.videoSrc;
       this.videoEl.currentTime = 0;
       void this.videoEl.play().catch(() => {});
     }
-  };
-
-  private startFreshFromPrompt = () => {
-    clearProgress();
-    this.setState({ showResumePrompt: false, pendingResume: null });
-    const d = this.props.defaultDifficulty || DEFAULT_DIFFICULTY;
-    const n = Number(this.props.defaultPieceCount || DEFAULT_PIECE_COUNT);
-    const preset = PIECE_COUNT_PRESETS[n] || PIECE_COUNT_PRESETS[DEFAULT_PIECE_COUNT];
-    this.newGame(preset[0], preset[1], d);
-  };
+    this.measureScale();
+  }
 
   // ---- video / canvas refs ----------------------------------------
 
@@ -482,7 +526,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   };
 
   private setGhostVideoRef = (el: HTMLVideoElement | null) => {
-    this.ghostVideoEl = el;
     if (el && !el.src) el.src = this.state.videoSrc;
   };
 
@@ -578,7 +621,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     const ctx = this.canvasEl.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+    ctx.clearRect(0, 0, this.state.layout.w, this.state.layout.h);
 
     // With a real clip: crop the board region out of the video, mapped per
     // piece. Without one (asset not present yet, or not ready yet at cold
@@ -684,46 +727,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     ctx.fillRect(0, 0, p.boxW, p.boxH);
   }
 
-  // ---- content selection --------------------------------------
-
-  private setContentType = (type: ContentType) => {
-    const mode: RenderMode = type === 'video' ? 'video' : 'image';
-    this.setState({ contentType: type, mode });
-    if (this.videoEl) {
-      if (mode === 'video') {
-        this.videoEl.currentTime = 0;
-        void this.videoEl.play().catch(() => {});
-      } else this.videoEl.pause();
-    }
-    this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
-  };
-
-  private toggleLibrary = () =>
-    this.setState((s) => ({ libraryOpen: !s.libraryOpen }));
-
-  private selectImage = (src: string) => {
-    this.setState({ imageSrc: src, libraryOpen: false });
-    this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
-  };
-
-    private selectVideo = (src: string) => {
-    this.setState({ videoSrc: src });
-    this.videoEverReady = false;
-    if (this.videoEl) {
-      this.videoEl.pause();
-      this.videoEl.src = src;
-      setTimeout(() => {
-        if (this.videoEl) {
-          this.videoEl.load();
-          if (this.state.mode === 'video')
-            void this.videoEl.play().catch(() => {});
-        }
-      }, 0);
-    }
-    if (this.ghostVideoEl) this.ghostVideoEl.src = src;
-    this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
-  };
-
   // ---- new game / intro --------------------------------------
 
   private newGame = (rows: number, cols: number, difficulty: Difficulty) => {
@@ -733,9 +736,11 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     clearTimeout(this.introFallbackTO);
     clearTimeout(this.introPulseTO);
     cancelAnimationFrame(this.introRaf ?? 0);
-    clearProgress();
+    // Deliberately NOT clearing saved progress here: a previously saved
+    // puzzle stays resumable until this one is actually broken apart and
+    // persisted over it (backing out during the intro keeps the old save).
 
-    const geo = generateGeometry(rows, cols, difficulty);
+    const geo = generateGeometry(rows, cols, difficulty, this.state.layout);
     this.magnetRadius = geo.magnetRadius;
     this.snapTol = geo.snapTol;
     this.applyTouchForgiveness();
@@ -845,32 +850,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
   private newGameClick = () =>
     this.newGame(this.state.rows, this.state.cols, this.state.difficulty);
-  private setPieceCount = (n: number) => {
-    const preset = PIECE_COUNT_PRESETS[n];
-    if (preset) this.newGame(preset[0], preset[1], this.state.difficulty);
-  };
-  private setDifficulty = (d: Difficulty) =>
-    this.newGame(this.state.rows, this.state.cols, d);
-
-  /** Arm / disarm the $5 wager. Arm it before "New game" to lock this round's
-   * par time; disarming mid-round just drops the bet with no settlement. */
-  private toggleWager = () => {
-    this.setState((s) => {
-      const wagerActive = !s.wagerActive;
-      const wagerParSec = wagerActive
-        ? wagerParSeconds(s.rows * s.cols, s.difficulty)
-        : 0;
-      if (wagerActive) this.startWagerTicker(wagerParSec);
-      else this.stopWagerTicker();
-      return {
-        wagerActive,
-        wagerParSec,
-        wagerResultNet: null,
-        wagerElapsedSec: 0,
-      };
-    });
-  };
-
   private startWagerTicker(parSec: number) {
     this.stopWagerTicker();
     this.wagerBustPlayed = false;
@@ -1010,6 +989,7 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       this.drag.memberIds,
       this.drag.anchorHomeLeft,
       this.drag.anchorHomeTop,
+      this.state.layout,
     );
     let moved = deriveClusterPositions(
       this.state.pieces,
@@ -1222,10 +1202,99 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
+  // ---- chrome actions -----------------------------------------
+
+  private openSettings = () => this.setState({ settingsOpen: true });
+  private closeSettings = () => this.setState({ settingsOpen: false });
+  private restartFromSettings = () => {
+    this.setState({ settingsOpen: false });
+    this.newGameClick();
+  };
+  private overviewFromSettings = () => {
+    this.setState({ settingsOpen: false });
+    this.props.onShowWelcome?.();
+  };
+  private dismissStatsCard = () => this.setState({ showStatsCard: false });
+  private exitToPicker = () => {
+    // save first: the picker reads the save as it renders, before this
+    // component's unmount runs
+    if (!this.state.introPhase) this.persist();
+    this.props.onExit?.();
+  };
+
+  /** Start another puzzle from the solved card. With no `onPlay` handler
+   * (stand-alone / tests) "Up next" just replays this one. */
+  private playConfig(cfg: PuzzleConfig) {
+    if (this.props.onPlay) this.props.onPlay(cfg);
+    else this.newGameClick();
+  }
+
+  private buildUpNext(): UpNextItem[] {
+    const s = this.state;
+    const pieceCount = s.rows * s.cols;
+    const wager = this.lastRoundWager;
+    const base = { difficulty: s.difficulty, pieceCount, wager };
+    const items: UpNextItem[] = [];
+
+    // the next Classic image in the library (wrapping), or the first one
+    const curImg = s.contentType === 'static' ? imageBySrc(s.imageSrc) : undefined;
+    const imgIdx = curImg ? IMAGES.indexOf(curImg) : -1;
+    const nextImg = IMAGES[(imgIdx + 1) % IMAGES.length];
+    // a Live clip: the next one if you just did Live, else the jellyfish
+    const curVid = s.contentType === 'video' ? videoBySrc(s.videoSrc) : undefined;
+    const vidIdx = curVid ? VIDEOS.indexOf(curVid) : VIDEOS.findIndex((v) => v.key === 'jellyfish') - 1;
+    const nextVid = VIDEOS[(vidIdx + 1 + VIDEOS.length) % VIDEOS.length];
+
+    const imgItem: UpNextItem = {
+      key: `img-${nextImg.key}`,
+      label: nextImg.name,
+      thumb: nextImg.thumb,
+      live: false,
+      onPick: () => this.playConfig({ ...base, contentType: 'static', src: nextImg.full }),
+    };
+    const vidItem: UpNextItem = {
+      key: `vid-${nextVid.key}`,
+      label: nextVid.name,
+      thumb: nextVid.poster,
+      live: true,
+      onPick: () => this.playConfig({ ...base, contentType: 'video', src: nextVid.src }),
+    };
+    if (s.contentType === 'video') items.push(vidItem, imgItem);
+    else items.push(imgItem, vidItem);
+
+    const curSrc = s.contentType === 'video' ? s.videoSrc : s.imageSrc;
+    const curThumb =
+      s.contentType === 'video' ? curVid?.poster ?? '' : curImg?.thumb ?? s.imageSrc;
+    const harder: Difficulty | null =
+      s.difficulty === 'easy' ? 'moderate' : s.difficulty === 'moderate' ? 'hard' : null;
+    items.push({
+      key: 'again',
+      label: harder ? `This one on ${DIFFICULTY_NAME[harder]}` : 'Play this again',
+      thumb: curThumb,
+      live: s.contentType === 'video',
+      onPick: () =>
+        this.playConfig({
+          ...base,
+          contentType: s.contentType,
+          src: curSrc,
+          difficulty: harder ?? s.difficulty,
+        }),
+    });
+    return items;
+  }
+
+  private canRotateSelected() {
+    const s = this.state;
+    if (s.selectedId == null || s.introPhase) return false;
+    const p = s.pieces.find((pp) => pp.id === s.selectedId);
+    return !!p && !p.solved && this.groupSize(p.groupId) === 1;
+  }
+
   // ---- render ------------------------------------------
 
   render() {
     const s = this.state;
+    const L = s.layout;
     const isVideoMode = s.mode === 'video';
     const isImageMode = !isVideoMode;
     const activePreset =
@@ -1233,17 +1302,28 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
     const pageBg = activePreset.css ?? bgCssFor(activePreset.hex, 260);
     const isWon = s.pieces.length > 0 && s.solvedCount === s.pieces.length;
 
-    const difficultyLabel = {
-      easy: 'Easy · No rotation',
-      moderate: 'Moderate · Snap 90°',
-      hard: 'Hard · Free rotate',
-    }[s.difficulty];
     const helpText = {
-      easy: 'Drag pieces into place — no rotation needed. Double-click a placed piece to pull it back apart.',
+      easy: 'Drag pieces into place — no rotation needed. Double-click (or double-tap) a placed piece to pull it back apart.',
       moderate:
-        'Select a piece, then tap the rotate button to turn it 90° at a time. Double-click a placed piece to pull it back apart.',
-      hard: 'Select a piece, then drag its handle to spin it freely into place. Double-click a placed piece to pull it back apart.',
+        'Tap a piece to select it, then hit Rotate (or the button on the piece) to turn it 90° at a time. Double-click a placed piece to pull it back apart.',
+      hard: 'Tap a piece, then drag the round handle above it to spin it freely into place. Double-click a placed piece to pull it back apart.',
     }[s.difficulty];
+    const tip =
+      s.introPhase === 'hold'
+        ? 'Tap the picture to break it apart'
+        : s.isPhone
+          ? null
+          : {
+              easy: 'Drag pieces into place',
+              moderate: 'Select a piece, then Rotate to turn it',
+              hard: 'Select a piece, then drag its handle to spin it',
+            }[s.difficulty];
+
+    const title =
+      s.contentType === 'video'
+        ? labelForSrc('video', s.videoSrc)
+        : labelForSrc('static', s.imageSrc);
+    const metaLabel = `${DIFFICULTY_NAME[s.difficulty]} · ${s.rows * s.cols}`;
 
     const pieceViews = this.buildPieceViews();
     const handle = this.buildRotateHandle();
@@ -1251,9 +1331,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     const bestTimes = isWon ? bestTimesFor(s) : [];
 
-    // live wager pot — replaces the time chip while a bet is in play. Reads
-    // wagerElapsedSec (updated by the dedicated nickel ticker), not the
-    // once-per-second elapsedSec, so it moves at the real payout cadence.
     const wagerPotNow = s.wagerActive
       ? wagerPot(s.wagerElapsedSec, s.wagerParSec)
       : 0;
@@ -1261,16 +1338,14 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
 
     return (
       <div
+        className="game-root"
         style={{
-          minHeight: '100vh',
-          background: '#100e0c',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          color: '#f2ede6',
-          padding: '20px 16px 60px',
-          boxSizing: 'border-box',
+          background: G2.bgPage,
+          fontFamily: G2.fontBody,
+          color: G2.textBody,
+          overflow: 'hidden',
         }}
       >
         <span
@@ -1289,359 +1364,396 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
           }}
         />
 
-        {s.showResumePrompt && s.pendingResume && (
-          <ResumePrompt
-            summary={this.resumeSummary(s.pendingResume)}
-            onResume={this.resumeGame}
-            onStartNew={this.startFreshFromPrompt}
-          />
-        )}
-
-        <Toolbar
-          difficultyLabel={difficultyLabel}
-          rows={s.rows}
-          cols={s.cols}
-          difficulty={s.difficulty}
-          contentType={s.contentType}
-          videoSrc={s.videoSrc}
-          bgColor={s.bgColor}
-           showGhost={s.showGhost}
-          timerHidden={s.timerHidden}
-          soundMuted={s.soundMuted}
-          timeLabel={this.formatTime(s.elapsedSec)}
+        <GameBar
+          title={title}
+          metaLabel={metaLabel}
           solvedCount={s.solvedCount}
           totalPieces={s.pieces.length}
-          currentImageLabel={
-            s.contentType === 'video'
-              ? labelForSrc('video', s.videoSrc)
-              : labelForSrc('static', s.imageSrc)
-        }
-          hintAvailable={s.pieces.some((p) => !p.solved)}
-          hintsRemaining={s.hintsRemaining}
-          hintPackSize={HINT_PACK_SIZE}
-          hintPackPrice={HINT_PACK_PRICE[s.difficulty]}
+          timeLabel={this.formatTime(s.elapsedSec)}
+          timerHidden={s.timerHidden}
+          onToggleTimer={this.toggleTimerHidden}
           wagerActive={s.wagerActive}
           wagerPot={wagerPotNow}
           wagerLost={wagerLost}
-          wagerBalance={s.wagerBalance}
-          wagerStake={WAGER_STAKE}
-          onToggleWager={this.toggleWager}
-          onShowWelcome={this.props.onShowWelcome}
-          onSetContentType={this.setContentType}
-          onSetPieceCount={this.setPieceCount}
-          onSetDifficulty={this.setDifficulty}
-          onToggleGhost={this.toggleGhost}
-          onToggleSound={this.toggleSound}
-          onToggleTimerHidden={this.toggleTimerHidden}
-          onTriggerHint={this.triggerHint}
-          onBuyHints={this.buyHints}
-          onNewGame={this.newGameClick}
-          onToggleLibrary={this.toggleLibrary}
-          onSelectVideo={this.selectVideo}
-          onSetBgColor={this.setBgColor}
+          isPhone={s.isPhone}
+          onBack={this.exitToPicker}
+          onOpenSettings={this.openSettings}
         />
 
         <div
           style={{
-            fontSize: 12,
-            color: '#6f6659',
-            paddingBottom: 14,
-            textAlign: 'center',
+            flex: '1 1 0',
+            minHeight: 0,
+            display: 'flex',
+            padding: s.isPhone ? '10px 12px 0' : '16px 24px 0',
           }}
         >
-          {helpText}
-        </div>
-
-        <div
-          ref={this.setStageHostRef}
-          style={{ width: '100%', maxWidth: 1120, margin: '0 auto' }}
-        >
           <div
+            ref={this.setStageHostRef}
             style={{
-              position: 'relative',
-              width: STAGE_W * s.stageScale,
-              height: STAGE_H * s.stageScale,
-              background: pageBg,
-              borderRadius: 8,
-              overflow: 'hidden',
+              flex: '1 1 0',
+              minWidth: 0,
+              minHeight: 0,
+              display: 'flex',
+              alignItems: s.isPhone ? 'flex-start' : 'center',
+              justifyContent: 'center',
             }}
           >
             <div
-              ref={this.setStageRef}
-              data-testid="stage"
-              onClick={this.deselect}
               style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: STAGE_W,
-                height: STAGE_H,
-                transform: `scale(${s.stageScale})`,
-                transformOrigin: 'top left',
+                position: 'relative',
+                width: L.w * s.stageScale,
+                height: L.h * s.stageScale,
+                background: pageBg,
+                borderRadius: s.isPhone ? 10 : 14,
+                overflow: 'hidden',
+                flexShrink: 0,
+                boxShadow: `0 0 0 1px ${G2.borderSubtle}`,
               }}
             >
-              {/* board outline */}
               <div
+                ref={this.setStageRef}
+                data-testid="stage"
+                onClick={this.deselect}
                 style={{
                   position: 'absolute',
-                  left: BOARD_OFFSET_X,
-                  top: BOARD_OFFSET_Y,
-                  width: BOARD_W,
-                  height: BOARD_H,
-                  border: `1px ${activePreset.outlineStyle ?? 'dashed'} ${activePreset.outline}`,
-                  borderRadius: 4,
-                  pointerEvents: 'none',
+                  top: 0,
+                  left: 0,
+                  width: L.w,
+                  height: L.h,
+                  transform: `scale(${s.stageScale})`,
+                  transformOrigin: 'top left',
                 }}
-              />
+              >
+                {L.tray && (
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      left: L.tray.x,
+                      top: L.tray.y - 18,
+                      width: L.tray.w,
+                      height: L.tray.h + 18,
+                      background: 'rgba(5,5,6,0.38)',
+                      borderTop: '2px dashed rgba(255,255,255,0.12)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
 
-              <FuseGauge
-                active={s.wagerActive}
-                potNow={wagerPotNow}
-                parSec={s.wagerParSec}
-                elapsedSec={s.wagerElapsedSec}
-              />
-
-              {s.showGhost && isImageMode && (
+                {/* board outline */}
                 <div
                   style={{
                     position: 'absolute',
-                    left: BOARD_OFFSET_X,
-                    top: BOARD_OFFSET_Y,
+                    left: L.boardX,
+                    top: L.boardY,
                     width: BOARD_W,
                     height: BOARD_H,
+                    border: `${L.kind === 'phone' ? 2 : 1}px ${activePreset.outlineStyle ?? 'dashed'} ${activePreset.outline}`,
                     borderRadius: 4,
-                    backgroundImage: `url('${s.imageSrc}')`,
-                    backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
-                    backgroundPosition: 'center',
-                    opacity: 0.32,
                     pointerEvents: 'none',
                   }}
                 />
-              )}
-              {s.showGhost && isVideoMode && (
-                <video
-                  ref={this.setGhostVideoRef}
-                  muted
-                  loop
-                  playsInline
-                  autoPlay
-                  style={{
-                    position: 'absolute',
-                    left: BOARD_OFFSET_X,
-                    top: BOARD_OFFSET_Y,
-                    width: BOARD_W,
-                    height: BOARD_H,
-                    borderRadius: 4,
-                    objectFit: 'cover',
-                    opacity: 0.32,
-                    pointerEvents: 'none',
-                  }}
+
+                <FuseGauge
+                  active={s.wagerActive}
+                  potNow={wagerPotNow}
+                  parSec={s.wagerParSec}
+                  elapsedSec={s.wagerElapsedSec}
+                  boardX={L.boardX}
+                  boardY={L.boardY}
                 />
-              )}
 
-              {hintRect && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: hintRect.left,
-                    top: hintRect.top,
-                    width: hintRect.w,
-                    height: hintRect.h,
-                    border: '2px solid #3fae7d',
-                    borderRadius: 8,
-                    boxShadow: '0 0 22px rgba(63,174,125,.6)',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-
-              {isImageMode &&
-  pieceViews.map((pv) => {
-    // Faux-thickness edge: a solid cardboard-colored copy of
-    // the same shape, scaled up slightly so it peeks out
-    // evenly on every side as a rim. This is a flat color with
-    // NO filter — cheap to paint — unlike a drop-shadow-based
-    // outline, which forced the browser to rasterize+blur
-    // every piece's silhouette on every interaction and caused
-    // real click lag at higher piece counts.
-    const rimPx = pv.lifted ? 2 : 1;
-    const rimColor = pv.lifted ? '#b8a98c' : '#cfc3a8';
-    const rimScale =
-      1 + (rimPx * 2) / Math.max(pv.w, pv.h, 1);
-    return (
-      <div
-        key={pv.id}
-        style={{
-          position: 'absolute',
-          left: pv.left,
-          top: pv.top,
-          width: pv.w,
-          height: pv.h,
-          transform: pv.transform,
-          zIndex: pv.z,
-          transition: pv.transition,
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            transform: `scale(${rimScale})`,
-            clipPath: `path('${pv.clip}')`,
-            WebkitClipPath: `path('${pv.clip}')`,
-            background: rimColor,
-            transition: 'transform .12s ease-out',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          data-piece-id={pv.id}
-          onPointerDown={pv.onDown}
-          onPointerMove={pv.onMove}
-          onPointerUp={pv.onUp}
-          onDoubleClick={pv.onDouble}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: `path('${pv.clip}')`,
-            WebkitClipPath: `path('${pv.clip}')`,
-            backgroundImage: `url('${s.imageSrc}')`,
-            backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
-            backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
-            cursor: pv.cursor,
-            boxShadow: pv.shadow,
-            filter: pv.filter,
-            touchAction: 'none',
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: `path('${pv.clip}')`,
-            WebkitClipPath: `path('${pv.clip}')`,
-            background:
-              'linear-gradient(135deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,.35) 100%)',
-            mixBlendMode: 'overlay',
-            pointerEvents: 'none',
-          }}
-        />
-      </div>
-    );
-  })}
-
-              {isVideoMode && (
-                <>
+                {s.showGhost && isImageMode && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: L.boardX,
+                      top: L.boardY,
+                      width: BOARD_W,
+                      height: BOARD_H,
+                      borderRadius: 4,
+                      backgroundImage: `url('${s.imageSrc}')`,
+                      backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
+                      backgroundPosition: 'center',
+                      opacity: 0.32,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
+                {s.showGhost && isVideoMode && (
                   <video
-                    ref={this.setVideoRef}
+                    ref={this.setGhostVideoRef}
                     muted
                     loop
                     playsInline
                     autoPlay
                     style={{
                       position: 'absolute',
-                      width: 2,
-                      height: 2,
-                      opacity: 0,
+                      left: L.boardX,
+                      top: L.boardY,
+                      width: BOARD_W,
+                      height: BOARD_H,
+                      borderRadius: 4,
+                      objectFit: 'cover',
+                      opacity: 0.32,
                       pointerEvents: 'none',
                     }}
                   />
-                  <canvas
-                    ref={this.setCanvasRef}
-                    width={STAGE_W}
-                    height={STAGE_H}
-                    onPointerDown={this.canvasPointerDown}
-                    onPointerMove={this.canvasPointerMove}
-                    onPointerUp={this.canvasPointerUp}
-                    onDoubleClick={this.canvasDoubleClick}
+                )}
+
+                {hintRect && (
+                  <div
                     style={{
                       position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      width: STAGE_W,
-                      height: STAGE_H,
-                      cursor: s.draggingGroupId != null ? 'grabbing' : 'grab',
-                      touchAction: 'none',
+                      left: hintRect.left,
+                      top: hintRect.top,
+                      width: hintRect.w,
+                      height: hintRect.h,
+                      border: `2px solid ${GAME_ACCENT}`,
+                      borderRadius: 8,
+                      boxShadow: '0 0 22px rgba(139,92,246,.65)',
+                      pointerEvents: 'none',
                     }}
                   />
-                </>
-              )}
+                )}
 
-              {s.introPulse && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: BOARD_OFFSET_X,
-                    top: BOARD_OFFSET_Y,
-                    width: BOARD_W,
-                    height: BOARD_H,
-                    borderRadius: 4,
-                    boxShadow:
-                      '0 0 0 2px rgba(0,82,255,.4), 0 0 46px rgba(0,82,255,.4)',
-                    pointerEvents: 'none',
-                    zIndex: 50,
-                    opacity: 0,
-                    animation: 'introNudgeGlow 1.8s ease-in-out infinite',
-                  }}
-                />
-              )}
+                {isImageMode &&
+                  pieceViews.map((pv) => {
+                    // Faux-thickness edge: a solid cardboard-colored copy of
+                    // the same shape, scaled up slightly so it peeks out
+                    // evenly on every side as a rim. Flat color, no filter —
+                    // cheap to paint (a drop-shadow outline caused click lag
+                    // at higher piece counts).
+                    const rimPx = pv.lifted ? 2 : 1;
+                    const rimColor = pv.lifted ? '#b8a98c' : '#cfc3a8';
+                    const rimScale = 1 + (rimPx * 2) / Math.max(pv.w, pv.h, 1);
+                    return (
+                      <div
+                        key={pv.id}
+                        style={{
+                          position: 'absolute',
+                          left: pv.left,
+                          top: pv.top,
+                          width: pv.w,
+                          height: pv.h,
+                          transform: pv.transform,
+                          zIndex: pv.z,
+                          transition: pv.transition,
+                        }}
+                      >
+                        <div
+                          aria-hidden
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            transform: `scale(${rimScale})`,
+                            clipPath: `path('${pv.clip}')`,
+                            WebkitClipPath: `path('${pv.clip}')`,
+                            background: rimColor,
+                            transition: 'transform .12s ease-out',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <div
+                          data-piece-id={pv.id}
+                          onPointerDown={pv.onDown}
+                          onPointerMove={pv.onMove}
+                          onPointerUp={pv.onUp}
+                          onDoubleClick={pv.onDouble}
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            clipPath: `path('${pv.clip}')`,
+                            WebkitClipPath: `path('${pv.clip}')`,
+                            backgroundImage: `url('${s.imageSrc}')`,
+                            backgroundSize: `${BOARD_W}px ${BOARD_H}px`,
+                            backgroundPosition: `${pv.bgX}px ${pv.bgY}px`,
+                            cursor: pv.cursor,
+                            boxShadow: pv.shadow,
+                            filter: pv.filter,
+                            touchAction: 'none',
+                          }}
+                        />
+                        <div
+                          aria-hidden
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            clipPath: `path('${pv.clip}')`,
+                            WebkitClipPath: `path('${pv.clip}')`,
+                            background:
+                              'linear-gradient(135deg, rgba(255,255,255,.35) 0%, rgba(255,255,255,0) 35%, rgba(0,0,0,0) 65%, rgba(0,0,0,.35) 100%)',
+                            mixBlendMode: 'overlay',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
 
-              {handle && (
-                <div
-                  data-testid="rotate-handle"
-                  onClick={handle.isButton ? handle.onClick : undefined}
-                  onPointerDown={handle.isDrag ? handle.onDown : undefined}
-                  onPointerMove={handle.isDrag ? handle.onMove : undefined}
-                  onPointerUp={handle.isDrag ? handle.onUp : undefined}
-                  style={{
-                    position: 'absolute',
-                    left: handle.left,
-                    top: handle.top,
-                    width: handle.size,
-                    height: handle.size,
-                    borderRadius: '50%',
-                    background: '#3fae7d',
-                    color: '#100e0c',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: handle.isDrag ? 'grab' : 'pointer',
-                    boxShadow: '0 6px 16px rgba(0,0,0,.5)',
-                    zIndex: 900,
-                    touchAction: 'none',
-                  }}
-                >
-                  <RotateIcon size={handle.size * 0.47} />
-                </div>
-              )}
+                {isVideoMode && (
+                  <>
+                    <video
+                      ref={this.setVideoRef}
+                      muted
+                      loop
+                      playsInline
+                      autoPlay
+                      style={{
+                        position: 'absolute',
+                        width: 2,
+                        height: 2,
+                        opacity: 0,
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <canvas
+                      ref={this.setCanvasRef}
+                      width={L.w}
+                      height={L.h}
+                      onPointerDown={this.canvasPointerDown}
+                      onPointerMove={this.canvasPointerMove}
+                      onPointerUp={this.canvasPointerUp}
+                      onDoubleClick={this.canvasDoubleClick}
+                      style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: L.w,
+                        height: L.h,
+                        cursor: s.draggingGroupId != null ? 'grabbing' : 'grab',
+                        touchAction: 'none',
+                      }}
+                    />
+                  </>
+                )}
 
-              {isWon && (
-                <WinOverlay
-                  isImageMode={isImageMode}
-                  imageSrc={s.imageSrc}
-                  timeLabel={this.formatTime(s.elapsedSec)}
-                  bestTimes={bestTimes}
-                  currentTime={s.elapsedSec}
-                  showStatsCard={s.showStatsCard}
-                  configKey={configKey(s)}
-                  wagerResultNet={s.wagerResultNet}
-                  setRevealVideoRef={this.setRevealVideoRef}
-                  onPlayAgain={this.newGameClick}
-                />
-              )}
+                {s.introPulse && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: L.boardX,
+                      top: L.boardY,
+                      width: BOARD_W,
+                      height: BOARD_H,
+                      borderRadius: 4,
+                      boxShadow:
+                        '0 0 0 2px rgba(139,92,246,.45), 0 0 46px rgba(139,92,246,.4)',
+                      pointerEvents: 'none',
+                      zIndex: 50,
+                      opacity: 0,
+                      animation: 'introNudgeGlow 1.8s ease-in-out infinite',
+                    }}
+                  />
+                )}
+
+                {handle && (
+                  <div
+                    data-testid="rotate-handle"
+                    onClick={handle.isButton ? handle.onClick : undefined}
+                    onPointerDown={handle.isDrag ? handle.onDown : undefined}
+                    onPointerMove={handle.isDrag ? handle.onMove : undefined}
+                    onPointerUp={handle.isDrag ? handle.onUp : undefined}
+                    style={{
+                      position: 'absolute',
+                      left: handle.left,
+                      top: handle.top,
+                      width: handle.size,
+                      height: handle.size,
+                      borderRadius: '50%',
+                      background: '#7C3AED',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: handle.isDrag ? 'grab' : 'pointer',
+                      boxShadow: '0 6px 16px rgba(0,0,0,.5)',
+                      zIndex: 900,
+                      touchAction: 'none',
+                    }}
+                  >
+                    <RotateIcon size={handle.size * 0.47} />
+                  </div>
+                )}
+
+                {isWon && (
+                  <WinReveal
+                    isImageMode={isImageMode}
+                    imageSrc={s.imageSrc}
+                    boardX={L.boardX}
+                    boardY={L.boardY}
+                    setRevealVideoRef={this.setRevealVideoRef}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {s.libraryOpen && (
-          <ImageLibraryModal
-            groups={imagesByCategory()}
-            currentSrc={s.imageSrc}
-            canAccess={(tier) => canAccess(tier)}
-            onPick={this.selectImage}
-            onClose={this.toggleLibrary}
+        <div
+          aria-live="polite"
+          style={{
+            minHeight: tip ? 20 : 0,
+            paddingTop: tip ? 10 : 0,
+            textAlign: 'center',
+            fontSize: 12.5,
+            color: s.introPhase === 'hold' ? '#C4B5FD' : G2.textTertiary,
+            fontWeight: s.introPhase === 'hold' ? 600 : 400,
+            flexShrink: 0,
+          }}
+        >
+          {tip}
+        </div>
+
+        <Dock
+          difficulty={s.difficulty}
+          canRotate={this.canRotateSelected()}
+          onRotate={this.rotateSelected90}
+          hintsRemaining={s.hintsRemaining}
+          hintAvailable={!s.introPhase && s.pieces.some((p) => !p.solved)}
+          onHint={this.triggerHint}
+          showGhost={s.showGhost}
+          onToggleGhost={this.toggleGhost}
+          soundMuted={s.soundMuted}
+          onToggleSound={this.toggleSound}
+          isPhone={s.isPhone}
+          onOpenSettings={this.openSettings}
+        />
+
+        {s.settingsOpen && (
+          <SettingsMenu
+            isPhone={s.isPhone}
+            helpText={helpText}
+            bgColor={s.bgColor}
+            onSetBgColor={this.setBgColor}
+            soundMuted={s.soundMuted}
+            onToggleSound={this.toggleSound}
+            timerHidden={s.timerHidden}
+            onToggleTimer={this.toggleTimerHidden}
+            hintPackSize={HINT_PACK_SIZE}
+            hintPackPrice={HINT_PACK_PRICE[s.difficulty]}
+            wagerBalance={s.wagerBalance}
+            onBuyHints={this.buyHints}
+            onRestart={this.restartFromSettings}
+            onOverview={this.props.onShowWelcome ? this.overviewFromSettings : undefined}
+            onClose={this.closeSettings}
+          />
+        )}
+
+        {isWon && s.showStatsCard && (
+          <WinCard
+            title={title}
+            metaLabel={metaLabel}
+            timeLabel={this.formatTime(s.elapsedSec)}
+            bestTimes={bestTimes}
+            currentTime={s.elapsedSec}
+            wagerResultNet={s.wagerResultNet}
+            wagerBalance={s.wagerBalance}
+            upNext={this.buildUpNext()}
+            isPhone={s.isPhone}
+            onAllPuzzles={this.exitToPicker}
+            onDismiss={this.dismissStatsCard}
           />
         )}
       </div>
@@ -1649,15 +1761,6 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
   }
 
   // ---- render helpers -------------------------------------
-
-  private resumeSummary(pr: SavedProgress) {
-    const diffLbl =
-      { easy: 'Easy', moderate: 'Moderate', hard: 'Hard' }[pr.difficulty] ||
-      pr.difficulty;
-    return `${pr.rows * pr.cols} pieces · ${diffLbl} · ${this.formatTime(
-      pr.elapsedSec,
-    )} elapsed`;
-  }
 
   private buildHintRect() {
     const s = this.state;
@@ -1781,9 +1884,9 @@ export class JigsawGame extends Component<JigsawGameProps, JigsawGameState> {
       const scale = isDragging ? 1.09 : isPulsing ? 1.07 : isHinted ? 1.05 : 1;
       const lift = isDragging ? -6 : 0;
       let shadow = 'none';
-      if (isPulsing) shadow = '0 0 0 3px rgba(63,174,125,.85)';
+      if (isPulsing) shadow = '0 0 0 3px rgba(139,92,246,.9)';
       else if (isHinted)
-        shadow = '0 0 0 3px rgba(63,174,125,.95), 0 0 26px rgba(63,174,125,.75)';
+        shadow = '0 0 0 3px rgba(139,92,246,.95), 0 0 26px rgba(139,92,246,.75)';
       let filter = 'none';
       if (!p.solved) {
         if (isDragging) filter = 'drop-shadow(0 18px 20px rgba(0,0,0,.55))';
@@ -1852,24 +1955,4 @@ interface PieceView {
   onMove: (e: React.PointerEvent) => void;
   onUp: (e: React.PointerEvent) => void;
   onDouble: (e: React.SyntheticEvent) => void;
-}
-
-function RotateIcon({ size = 16 }: { size?: number }) {
-  const st: CSSProperties = { display: 'block' };
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={st}
-    >
-      <path d="M21 12a9 9 0 1 1-3-6.7" />
-      <polyline points="21 3 21 9 15 9" />
-    </svg>
-  );
 }

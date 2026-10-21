@@ -31,11 +31,13 @@ function LiveTile({
   poster,
   name,
   nudge,
+  onPick,
 }: {
   src: string;
   poster: string;
   name: string;
   nudge: number;
+  onPick?: () => void;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -75,9 +77,17 @@ function LiveTile({
   }, [nudge]);
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onPick}
+      aria-label={`Play ${name}`}
       style={{
         position: 'relative',
+        display: 'block',
+        width: '100%',
+        padding: 0,
+        border: 0,
+        cursor: onPick ? 'pointer' : 'default',
         aspectRatio: '3 / 4',
         borderRadius: 10,
         overflow: 'hidden',
@@ -118,7 +128,7 @@ function LiveTile({
       >
         {name}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -127,7 +137,7 @@ function isInView(el: Element) {
   return r.bottom > 0 && r.top < window.innerHeight;
 }
 
-export function LiveRow() {
+export function LiveRow({ onPick }: { onPick?: (src: string) => void }) {
   const [nudge, setNudge] = useState(0);
   useFirstInteraction(() => setNudge((n) => n + 1));
 
@@ -172,6 +182,7 @@ export function LiveRow() {
             poster={v.poster}
             name={v.name}
             nudge={nudge}
+            onPick={onPick ? () => onPick(v.src) : undefined}
           />
         ))}
       </div>

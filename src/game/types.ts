@@ -65,4 +65,17 @@ export interface SavedProgress {
   bgColor: string;
   elapsedSec: number;
   savedAt: number;
+  /** Stage layout the game was started with; absent on saves from before the
+   * phone layout existed (those are desktop). */
+  layoutKind?: 'desktop' | 'phone';
+}
+
+/** Everything the picker hands the game to start a round. */
+export interface PuzzleConfig {
+  contentType: ContentType;
+  /** Image `full` src (Classic) or video src (Live). */
+  src: string;
+  difficulty: Difficulty;
+  pieceCount: number;
+  wager: boolean;
 }

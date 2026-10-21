@@ -5,6 +5,8 @@ interface Props {
   potNow: number;
   parSec: number;
   elapsedSec: number;
+  boardX?: number;
+  boardY?: number;
 }
 
 const PERIMETER = 2 * (BOARD_W + BOARD_H);
@@ -29,7 +31,14 @@ function pointOnPerimeter(len: number): { x: number; y: number } {
  * `wagerPot` decays from $10 to $0 — so the visual and the payout hit zero
  * at the same instant with no separate math.
  */
-export function FuseGauge({ active, potNow, parSec, elapsedSec }: Props) {
+export function FuseGauge({
+  active,
+  potNow,
+  parSec,
+  elapsedSec,
+  boardX = BOARD_OFFSET_X,
+  boardY = BOARD_OFFSET_Y,
+}: Props) {
   if (!active) return null;
 
   const totalBurnSec = parSec * 2;
@@ -49,8 +58,8 @@ export function FuseGauge({ active, potNow, parSec, elapsedSec }: Props) {
       viewBox={`0 0 ${BOARD_W} ${BOARD_H}`}
       style={{
         position: 'absolute',
-        left: BOARD_OFFSET_X,
-        top: BOARD_OFFSET_Y,
+        left: boardX,
+        top: boardY,
         pointerEvents: 'none',
         overflow: 'visible',
       }}

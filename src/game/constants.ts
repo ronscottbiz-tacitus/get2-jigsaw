@@ -29,12 +29,74 @@ export const PIECE_COUNT_PRESETS: Record<number, [number, number]> = {
 };
 
 export const DEFAULT_PIECE_COUNT = 48;
+/** Phones default to the smallest grid — 48 pieces on a ~360px-wide board is
+ * a squint. Players can still pick more in the picker. */
+export const DEFAULT_PIECE_COUNT_PHONE = 25;
+
+/* ------------------------------------------------------------------------- *
+ *  Stage layouts. The board is always 840x480 (piece geometry depends on it);
+ *  what changes is the stage around it.
+ *   - desktop: the original 1120x760 stage, board centred, pieces scatter
+ *     anywhere on the stage.
+ *   - phone: a tall, narrow stage — board pinned to the top at near full
+ *     width, and a "tray" below it that the pieces break apart into, so the
+ *     board gets the screen width and the pieces get the leftover height.
+ *  A game's layout is fixed when it starts (home coordinates depend on it).
+ * ------------------------------------------------------------------------- */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+export interface StageLayout {
+  kind: 'desktop' | 'phone';
+  w: number;
+  h: number;
+  boardX: number;
+  boardY: number;
+  /** Region pieces scatter into. null = anywhere on the stage. */
+  tray: Rect | null;
+}
+
+export const DESKTOP_LAYOUT: StageLayout = {
+  kind: 'desktop',
+  w: STAGE_W,
+  h: STAGE_H,
+  boardX: BOARD_OFFSET_X,
+  boardY: BOARD_OFFSET_Y,
+  tray: null,
+};
+
+const PHONE_MARGIN = 24;
+const PHONE_TRAY_GAP = 40;
+const PHONE_STAGE_H = 1600;
+export const PHONE_LAYOUT: StageLayout = {
+  kind: 'phone',
+  w: BOARD_W + PHONE_MARGIN * 2,
+  h: PHONE_STAGE_H,
+  boardX: PHONE_MARGIN,
+  boardY: PHONE_MARGIN,
+  tray: {
+    x: 0,
+    y: PHONE_MARGIN + BOARD_H + PHONE_TRAY_GAP,
+    w: BOARD_W + PHONE_MARGIN * 2,
+    h: PHONE_STAGE_H - (PHONE_MARGIN + BOARD_H + PHONE_TRAY_GAP),
+  },
+};
+
+export function layoutFor(kind: StageLayout['kind'] | undefined): StageLayout {
+  return kind === 'phone' ? PHONE_LAYOUT : DESKTOP_LAYOUT;
+}
+
+export function isPhoneViewport(): boolean {
+  return typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT;
+}
 export const DEFAULT_DIFFICULTY = 'moderate' as const;
 
-/** Below this viewport width, the Toolbar switches to a compact header +
- * bottom-sheet layout instead of its single wide row. Board/piece sizing is
- * unaffected — that's driven purely by `useStageScale`'s width-based
- * scale-to-fit, independent of this breakpoint. */
+/** At or below this viewport width the game uses the phone chrome (compact
+ * bar, full-width dock, bottom sheets) and new puzzles start on the phone
+ * stage layout (board on top, piece tray below). */
 export const MOBILE_BREAKPOINT = 640;
 
 export const BEST_TIMES_KEY = 'jigsaw_best_times_v1';
@@ -97,7 +159,37 @@ export function bgCssFor(hex: string, tile: number): string {
 
 /** Brand colours (Get2 fixed layer). */
 export const ACCENT = '#0052FF';
-export const GAME_ACCENT = '#3fae7d'; // in-app control accent (flexible layer)
+/** In-app control accent — Get2Puzzle's per-product color from the Get2
+ * design system (`accent-get2puzzle`). Brand blue stays on primary CTAs. */
+export const GAME_ACCENT = '#8B5CF6';
+/** Filled controls with white text (passes 4.5:1 where #8B5CF6 doesn't). */
+export const GAME_ACCENT_STRONG = '#7C3AED';
+/** Accent used as text on dark backgrounds. */
+export const GAME_ACCENT_TEXT = '#A78BFA';
+export const GAME_ACCENT_SOFT = 'rgba(124,58,237,0.18)';
+export const GAME_ACCENT_BORDER = 'rgba(139,92,246,0.55)';
+
+/** Get2 fixed-layer tokens (from the Get2 design system). */
+export const G2 = {
+  bgPage: '#050506',
+  bgPanel: '#0c0d10',
+  bgPanelAlt: '#0b0c0f',
+  textBody: '#F5F6F8',
+  textHeading: '#fff',
+  textSecondary: '#C7CAD1',
+  textTertiary: '#8A8F98',
+  textMuted: '#7B818C',
+  blue: '#0052FF',
+  blueLight: '#6C93FF',
+  borderSubtle: 'rgba(255,255,255,0.08)',
+  borderDefault: 'rgba(255,255,255,0.1)',
+  fontDisplay: "'Archivo Expanded', 'Archivo', 'Plus Jakarta Sans', sans-serif",
+  fontCondensed: "'Archivo Narrow', 'Archivo', 'Plus Jakarta Sans', sans-serif",
+  fontMono: "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+  fontBody: "'Plus Jakarta Sans', system-ui, sans-serif",
+} as const;
+
+export const LAST_SETUP_KEY = 'jigsaw_last_setup_v1';
 
 /* ------------------------------------------------------------------------- *
  *  Wager mode — an optional fake-money betting layer. Bet $5, it's matched
@@ -185,3 +277,8 @@ export const HINT_PACK_PRICE: Record<Difficulty, number> = {
   moderate: 4,
   hard: 7,
 };
+
+/** Play-money amount with a real minus sign: 2.1 → "$2.10", -0.57 → "−$0.57". */
+export function formatMoney(n: number): string {
+  return `${n < 0 ? '−' : ''}$${Math.abs(n).toFixed(2)}`;
+}

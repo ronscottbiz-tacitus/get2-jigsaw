@@ -8,6 +8,8 @@
  */
 import {
   BEST_TIMES_KEY,
+  LAST_SETUP_KEY,
+  PIECE_COUNT_PRESETS,
   PROGRESS_KEY,
   SOUND_MUTED_KEY,
   WAGER_BALANCE_KEY,
@@ -162,4 +164,55 @@ export function resetWelcomed(): void {
   } catch {
     /* storage unavailable */
   }
+}
+
+/** The picker's last-used difficulty / piece count, so a returning player's
+ * picker opens on the setup they played last. */
+export interface LastSetup {
+  difficulty: Difficulty;
+  pieceCount: number;
+}
+
+export function getLastSetup(): LastSetup | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAST_SETUP_KEY) || 'null');
+    if (
+      raw &&
+      (raw.difficulty === 'easy' || raw.difficulty === 'moderate' || raw.difficulty === 'hard') &&
+      PIECE_COUNT_PRESETS[raw.pieceCount]
+    ) {
+      return { difficulty: raw.difficulty, pieceCount: raw.pieceCount };
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+export function setLastSetup(s: LastSetup): void {
+  try {
+    localStorage.setItem(LAST_SETUP_KEY, JSON.stringify(s));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Best time (seconds) for a picker selection, or null if never solved. */
+export function bestTimeForConfig(
+  contentType: ContentType,
+  src: string,
+  difficulty: Difficulty,
+  pieceCount: number,
+): number | null {
+  const preset = PIECE_COUNT_PRESETS[pieceCount];
+  if (!preset) return null;
+  const list = bestTimesFor({
+    contentType,
+    imageSrc: src,
+    videoSrc: src,
+    difficulty,
+    rows: preset[0],
+    cols: preset[1],
+  });
+  return list.length ? list[0] : null;
 }
